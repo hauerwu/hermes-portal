@@ -422,7 +422,10 @@ func (s *InstanceService) Recreate(ctx context.Context, inst *models.Instance) e
 	return nil
 }
 
-// Destroy removes the container and (optionally) its data volume.
+// Destroy removes the container and (optionally) its data volume, then
+// marks the row destroyed and RELEASES its slug so a new instance can be
+// created with the same name (the slug column is unique at the DB level,
+// so a destroyed row would otherwise block reuse forever).
 func (s *InstanceService) Destroy(ctx context.Context, inst *models.Instance, keepVolume bool) {
 	if inst.Mode == models.ModeDocker {
 		s.docker.RemoveContainer(ctx, inst.ContainerName)
@@ -433,7 +436,12 @@ func (s *InstanceService) Destroy(ctx context.Context, inst *models.Instance, ke
 		}
 	}
 	inst.Status = models.StatusDestroyed
-	s.db.Model(inst).Updates(map[string]any{"status": models.StatusDestroyed, "updated_at": time.Now()})
+	inst.Slug = fmt.Sprintf("%s-del-%d", inst.Slug, inst.ID)
+	s.db.Model(inst).Updates(map[string]any{
+		"status":     models.StatusDestroyed,
+		"slug":       inst.Slug,
+		"updated_at": time.Now(),
+	})
 	s.cache.Invalidate(inst.ID)
 }
 

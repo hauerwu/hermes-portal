@@ -53,6 +53,11 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 	if err := Seed(db, cfg); err != nil {
 		return nil, err
 	}
+	// Release slugs of destroyed instances destroyed before this fix, so
+	// their names can be reused for new instances.
+	db.Model(&models.Instance{}).
+		Where("status = ? AND slug NOT LIKE ?", models.StatusDestroyed, "%-del-%").
+		Update("slug", gorm.Expr("slug || '-del-' || id"))
 	return db, nil
 }
 
