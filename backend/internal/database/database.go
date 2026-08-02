@@ -45,6 +45,7 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 		&models.Instance{},
 		&models.ApiKey{},
 		&models.AuditLog{},
+		&models.ModelConfig{},
 	); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

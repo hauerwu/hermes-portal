@@ -19,6 +19,7 @@ Hermes Agent 管理门户：统一管理**多个 hermes-agent 实例**（本机 
 | 审计日志 | 全量管理操作留痕，按动作/目标/操作者筛选 + 分页，租户隔离可见 |
 | 内嵌 Dashboard | hermes dashboard 全部功能（聊天、配置、渠道、会话、定时任务、技能、MCP、文件、日志…）在 portal 内嵌使用 |
 | 统一网关 | ① OpenAI API：`X-API-Key` 鉴权，portal 页内管理 Key；② channel webhook 回调固定 URL |
+| 模型配置 | 模型库：维护多个推理端点（URL/模型名/Key），设置默认模型，创建实例时选择使用 |
 
 ## 技术栈（与 hermes-agent 对齐 + 工程约定）
 
@@ -102,6 +103,17 @@ docker compose up -d --build
 - **远程纳管**：填远程 URL（dashboard 地址）+ OpenAI API 地址（可选，默认 `URL/v1`）。
 
 创建后点进实例详情即可看到**内嵌的完整 hermes dashboard**。
+
+### 5. 模型配置（模型库）
+
+「模型配置」菜单维护租户的推理端点库：显示名称、Provider（custom/OpenAI/OpenRouter/…）、
+端点 URL、模型名、API Key，可设置**默认模型**（创建实例时自动预选）。
+
+创建实例时在「使用模型库配置」下拉中选择一个模型，portal 会将其快照到实例并自动写入
+实例的 `config.yaml`（`model.provider/base_url/default/api_key`）。
+
+> 提示：`custom`（OpenAI 兼容端点）会原样保留你填写的模型名与 URL；选择内置 Provider
+> （openai/deepseek/…）时，hermes 会按其 provider 规范处理模型与鉴权。
 
 ### 4. 使用统一网关
 

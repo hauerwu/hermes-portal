@@ -29,6 +29,7 @@ export interface Instance {
   status: string;
   remote_url: string;
   openapi_url: string;
+  model_id: number | null;
   config: {
     extra_env?: Record<string, string>;
     mem_limit?: string;
@@ -49,6 +50,19 @@ export interface ApiKey {
   active: boolean;
   expires_at: string | null;
   last_used: string | null;
+  created_at: string;
+}
+
+export interface ModelConfig {
+  id: number;
+  tenant_id: number;
+  name: string;
+  slug: string;
+  provider: string;
+  url: string;
+  model: string;
+  has_key: boolean;
+  is_default: boolean;
   created_at: string;
 }
 
@@ -200,6 +214,16 @@ export const api = {
   destroyInstance: (id: number, keepVolume = false) =>
     request<{ ok: boolean }>(`/api/instances/${id}?keep_volume=${keepVolume ? 1 : 0}`, { method: "DELETE" }),
   gatewayUrls: (id: number) => request<GatewayUrls>(`/api/instances/${id}/gateway-urls`),
+
+  // model library
+  listModels: () => request<ModelConfig[]>("/api/models"),
+  createModel: (b: Record<string, unknown>) =>
+    request<ModelConfig>("/api/models", { method: "POST", body: JSON.stringify(b) }),
+  updateModel: (id: number, b: Record<string, unknown>) =>
+    request<ModelConfig>(`/api/models/${id}`, { method: "PUT", body: JSON.stringify(b) }),
+  setDefaultModel: (id: number) =>
+    request<ModelConfig>(`/api/models/${id}/default`, { method: "POST" }),
+  deleteModel: (id: number) => request<{ ok: boolean }>(`/api/models/${id}`, { method: "DELETE" }),
 
   // audit
   listAudit: (params: Record<string, string | number> = {}) => {

@@ -366,6 +366,7 @@ type instanceBody struct {
 	ExtraEnv     map[string]string    `json:"extra_env"`
 	MemLimit     string               `json:"mem_limit"`
 	DefaultModel *models.DefaultModel `json:"default_model"`
+	ModelID      *uint                `json:"model_id"`  // optional model-library reference
 	TenantID     *uint                `json:"tenant_id"` // super admin only
 }
 
@@ -408,8 +409,25 @@ func (a *API) CreateInstance(c *gin.Context) {
 	if mode == "" {
 		mode = models.ModeDocker
 	}
+	// If a model-library entry was selected, snapshot it into the instance
+	// config (the instance carries its own copy so later library edits do
+	// not silently change running instances).
+	if body.ModelID != nil {
+		var lib models.ModelConfig
+		if err := a.db.First(&lib, *body.ModelID).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "model not found in library"})
+			return
+		}
+		if lib.TenantID != tenantID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "model belongs to another tenant"})
+			return
+		}
+		body.DefaultModel = &models.DefaultModel{
+			URL: lib.URL, Model: lib.Model, Key: lib.Key, Provider: lib.Provider,
+		}
+	}
 	inst, err := a.svc.Create(c.Request.Context(), tenantID, body.Name, mode, body.Slug,
-		body.Image, body.RemoteURL, body.OpenAPIURL, body.DefaultModel, body.ExtraEnv, &actor.ID)
+		body.Image, body.RemoteURL, body.OpenAPIURL, body.ModelID, body.DefaultModel, body.ExtraEnv, &actor.ID)
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(err.Error(), "docker is not reachable") {
@@ -436,6 +454,7 @@ type instanceUpdateBody struct {
 	ExtraEnv     map[string]string    `json:"extra_env"`
 	MemLimit     *string              `json:"mem_limit"`
 	DefaultModel *models.DefaultModel `json:"default_model"`
+	ModelID      *uint                `json:"model_id"`
 }
 
 func (a *API) UpdateInstance(c *gin.Context) {
@@ -497,6 +516,25 @@ func (a *API) UpdateInstance(c *gin.Context) {
 			cfg.DefaultModel = body.DefaultModel
 		}
 		instance.Config = security.MarshalJSON(cfg)
+		changed = true
+	}
+	if body.ModelID != nil {
+		var lib models.ModelConfig
+		if err := a.db.First(&lib, *body.ModelID).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "model not found in library"})
+			return
+		}
+		if actor.Role != models.RoleSuperAdmin && lib.TenantID != *actor.TenantID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "model belongs to another tenant"})
+			return
+		}
+		var cfg models.InstanceConfig
+		_ = security.UnmarshalJSON(instance.Config, &cfg)
+		cfg.DefaultModel = &models.DefaultModel{
+			URL: lib.URL, Model: lib.Model, Key: lib.Key, Provider: lib.Provider,
+		}
+		instance.Config = security.MarshalJSON(cfg)
+		instance.ModelID = body.ModelID
 		changed = true
 	}
 	if changed {
@@ -790,6 +828,7 @@ func publicInstance(i *models.Instance) gin.H {
 		"status":         i.Status,
 		"remote_url":     i.RemoteURL,
 		"openapi_url":    i.OpenAPIURL,
+		"model_id":       i.ModelID,
 		"config":         safe,
 		"last_heartbeat": i.LastHeartbeat,
 		"created_by":     i.CreatedBy,

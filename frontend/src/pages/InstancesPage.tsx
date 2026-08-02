@@ -10,7 +10,7 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
-import { api, type Instance } from "@/lib/api";
+import { api, type Instance, type ModelConfig } from "@/lib/api";
 
 const statusColor: Record<string, string> = {
   running: "bg-emerald-500/15 text-emerald-300",
@@ -178,6 +178,8 @@ export default function InstancesPage() {
 }
 
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [modelId, setModelId] = useState<number | "">("");
   const [mode, setMode] = useState<"docker" | "remote">("docker");
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -190,6 +192,14 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    api.listModels().then((m) => {
+      setModels(m);
+      const def = m.find((x) => x.is_default);
+      if (def) setModelId(def.id);
+    }).catch(() => {});
+  }, []);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -198,7 +208,9 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
       const body: Record<string, unknown> = { name, mode, slug };
       if (mode === "docker") {
         body.image = image;
-        if (modelUrl.trim() && modelName.trim()) {
+        if (modelId !== "") {
+          body.model_id = modelId; // 从模型库快照
+        } else if (modelUrl.trim() && modelName.trim()) {
           body.default_model = {
             url: modelUrl.trim(),
             model: modelName.trim(),
@@ -257,9 +269,27 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                 <input value={image} onChange={(e) => setImage(e.target.value)}
                   className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
               </div>
+              <div>
+                <label className="mb-1 block text-xs text-zinc-400">使用模型库配置</label>
+                <select
+                  value={modelId}
+                  onChange={(e) => setModelId(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500"
+                >
+                  <option value="">不选（手动配置）</option>
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}（{m.model}{m.is_default ? " · 默认" : ""}）
+                    </option>
+                  ))}
+                </select>
+                {models.length === 0 && (
+                  <div className="mt-1 text-[11px] text-zinc-600">模型库为空，可到「模型配置」页添加，或下方手动填写</div>
+                )}
+              </div>
               <details className="rounded-md border border-zinc-800 bg-zinc-950/40 p-3">
                 <summary className="cursor-pointer text-xs font-medium text-zinc-400 hover:text-amber-300">
-                  默认模型参数（可选）：OpenAI 兼容端点 URL / 模型名 / API Key
+                  手动配置默认模型参数（可选）：端点 URL / 模型名 / API Key
                 </summary>
                 <div className="mt-3 space-y-3">
                   <div>

@@ -82,6 +82,24 @@ type InstanceConfig struct {
 	DefaultModel    *DefaultModel     `json:"default_model,omitempty"`
 }
 
+// ModelConfig is a reusable default-model template (the model library).
+// Tenants maintain their own set; the default one is offered when
+// creating instances. The Key is stored here so instance creation can
+// snapshot it into the instance's own config.
+type ModelConfig struct {
+	ID        uint   `gorm:"primaryKey"`
+	TenantID  uint   `gorm:"index;not null"`
+	Name      string `gorm:"size:128;not null"` // display name, e.g. "OpenAI GPT-4o"
+	Slug      string `gorm:"size:64"`
+	Provider  string `gorm:"size:64"`           // custom | openrouter | openai | ...
+	URL       string `gorm:"size:512;not null"` // OpenAI-compatible endpoint base URL
+	Model     string `gorm:"size:256;not null"` // model name on the endpoint
+	Key       string `gorm:"size:512"`          // API key (kept out of API responses)
+	IsDefault bool   `gorm:"default:false;index"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 // Instance is a hermes-agent deployment — either a local container
 // (mode=docker) or an onboarded remote endpoint (mode=remote).
 type Instance struct {
@@ -92,6 +110,7 @@ type Instance struct {
 	Mode          string `gorm:"size:16;not null;default:docker"`
 	Image         string `gorm:"size:256"`
 	ContainerName string `gorm:"size:128"`
+	ModelID       *uint  `gorm:"index"` // optional reference to a ModelConfig
 	Status        string `gorm:"size:32;not null;default:created"`
 	Config        string `gorm:"type:text"` // JSON InstanceConfig
 	RemoteURL     string `gorm:"size:512"`

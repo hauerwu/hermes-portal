@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router";
 import {
   Boxes,
+  Cpu,
   History,
   KeyRound,
   LayoutDashboard,
@@ -22,6 +23,7 @@ import ApiKeysPage from "@/pages/ApiKeysPage";
 import UsersPage from "@/pages/UsersPage";
 import TenantsPage from "@/pages/TenantsPage";
 import AuditLogsPage from "@/pages/AuditLogsPage";
+import ModelConfigsPage from "@/pages/ModelConfigsPage";
 import SettingsPage from "@/pages/SettingsPage";
 
 const SIDEBAR_KEY = "portal.sidebar.collapsed";
@@ -42,6 +44,7 @@ function Shell() {
 
   const nav = [
     { to: "/instances", label: "实例管理", icon: Boxes },
+    { to: "/models", label: "模型配置", icon: Cpu },
     { to: "/apikeys", label: "API Keys", icon: KeyRound },
     ...(user.role === "super_admin" || user.role === "tenant_admin"
       ? [{ to: "/users", label: "用户管理", icon: Users }]
@@ -133,6 +136,7 @@ function Shell() {
           <Route path="/instances" element={<InstancesPage />} />
           <Route path="/instances/:id" element={<InstanceDetailPage />} />
           <Route path="/instances/:id/dashboard" element={<DashboardPage />} />
+          <Route path="/models" element={<ModelConfigsPage />} />
           <Route path="/apikeys" element={<ApiKeysPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/tenants" element={<TenantsPage />} />

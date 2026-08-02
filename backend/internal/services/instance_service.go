@@ -92,7 +92,7 @@ func VolumeName(instanceID uint) string {
 }
 
 // Create creates a new instance row and (for docker mode) its container.
-func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode, slug, image, remoteURL, openAPIURL string, defaultModel *models.DefaultModel, extraEnv map[string]string, createdBy *uint) (*models.Instance, error) {
+func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode, slug, image, remoteURL, openAPIURL string, modelID *uint, defaultModel *models.DefaultModel, extraEnv map[string]string, createdBy *uint) (*models.Instance, error) {
 	slug = Slugify(name, slug)
 	var count int64
 	s.db.Model(&models.Instance{}).Where("slug = ?", slug).Count(&count)
@@ -132,6 +132,7 @@ func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode,
 		Config:     security.MarshalJSON(cfg),
 		RemoteURL:  remoteURL,
 		OpenAPIURL: openAPIURL,
+		ModelID:    modelID,
 		CreatedBy:  createdBy,
 	}
 	if err := s.db.Create(inst).Error; err != nil {

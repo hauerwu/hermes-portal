@@ -124,6 +124,14 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		keys.POST("", apiHandler.CreateAPIKey)
 		keys.DELETE("/:id", apiHandler.RevokeAPIKey)
 
+		// model library — tenant admin manages; member reads
+		modelLib := mgmt.Group("/models")
+		modelLib.GET("", apiHandler.ListModels)
+		modelLib.POST("", middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin), apiHandler.CreateModel)
+		modelLib.PUT("/:id", middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin), apiHandler.UpdateModel)
+		modelLib.POST("/:id/default", middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin), apiHandler.SetDefaultModel)
+		modelLib.DELETE("/:id", middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin), apiHandler.DeleteModel)
+
 		// audit log — any logged-in user (scoped to own tenant)
 		audit := mgmt.Group("/audit")
 		audit.GET("", apiHandler.ListAuditLogs)

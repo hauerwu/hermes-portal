@@ -11,7 +11,7 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import { api, type GatewayUrls, type HealthResult, type Instance } from "@/lib/api";
+import { api, type GatewayUrls, type HealthResult, type Instance, type ModelConfig } from "@/lib/api";
 
 export default function InstanceDetailPage() {
   const { id } = useParams();
@@ -221,10 +221,17 @@ function EditInstanceModal({
   const [openapiUrl, setOpenapiUrl] = useState(instance.openapi_url || "");
   const [memLimit, setMemLimit] = useState(instance.config?.mem_limit || "");
   const [extraEnv, setExtraEnv] = useState<Record<string, string>>(instance.config?.extra_env || {});
+  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [modelId, setModelId] = useState<number | "">(instance.model_id ?? "");
   const [modelUrl, setModelUrl] = useState(instance.config?.default_model?.url || "");
   const [modelName, setModelName] = useState(instance.config?.default_model?.model || "");
   const [modelKey, setModelKey] = useState("");
   const [modelTouched, setModelTouched] = useState(false);
+  const [modelCleared, setModelCleared] = useState(false);
+
+  useEffect(() => {
+    api.listModels().then(setModels).catch(() => {});
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -241,7 +248,12 @@ function EditInstanceModal({
         extra_env: extraEnv,
         mem_limit: memLimit,
       };
-      if (modelTouched) {
+      if (modelId !== "") {
+        body.model_id = Number(modelId); // 从模型库切换
+      } else if (modelCleared) {
+        body.model_id = null; // 取消关联
+        body.default_model = { url: "", model: "" }; // 清空
+      } else if (modelTouched) {
         if (modelUrl.trim() && modelName.trim()) {
           body.default_model = { url: modelUrl.trim(), model: modelName.trim(), key: modelKey.trim() || undefined };
         } else {
@@ -321,8 +333,25 @@ function EditInstanceModal({
                 <span className="text-xs font-medium text-zinc-400">默认模型参数</span>
                 {!modelTouched && (
                   <button type="button" onClick={() => setModelTouched(true)}
-                    className="text-[11px] text-amber-300 hover:text-amber-200">修改</button>
+                    className="text-[11px] text-amber-300 hover:text-amber-200">手动修改</button>
                 )}
+              </div>
+              <div className="mb-2">
+                <select
+                  value={modelId}
+                  onChange={(e) => {
+                    setModelId(e.target.value === "" ? "" : Number(e.target.value));
+                    setModelCleared(e.target.value === "");
+                  }}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm outline-none focus:border-amber-500"
+                >
+                  <option value="">无（未关联模型库）</option>
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}（{m.model}{m.is_default ? " · 默认" : ""}）
+                    </option>
+                  ))}
+                </select>
               </div>
               {modelTouched ? (
                 <div className="space-y-2">
