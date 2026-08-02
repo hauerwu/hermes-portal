@@ -840,13 +840,15 @@ func publicInstance(i *models.Instance) gin.H {
 }
 
 func publicAPIKey(k *models.ApiKey) gin.H {
+	scopes := []string{"openapi"}
+	_ = security.UnmarshalJSON(k.Scopes, &scopes)
 	return gin.H{
 		"id":          k.ID,
 		"tenant_id":   k.TenantID,
 		"instance_id": k.InstanceID,
 		"name":        k.Name,
 		"key_prefix":  k.KeyPrefix,
-		"scopes":      k.Scopes,
+		"scopes":      scopes, // array, not a raw JSON string
 		"active":      k.Active,
 		"expires_at":  k.ExpiresAt,
 		"last_used":   k.LastUsed,

@@ -88,7 +88,9 @@ export default function ApiKeysPage() {
                     <div className="text-xs text-zinc-500">{instanceName(key.instance_id)}</div>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs text-zinc-400">{key.key_prefix}…</td>
-                  <td className="px-4 py-2.5 text-xs text-zinc-400">{key.scopes.join(", ")}</td>
+                  <td className="px-4 py-2.5 text-xs text-zinc-400">
+                    {Array.isArray(key.scopes) ? key.scopes.join(", ") : String(key.scopes)}
+                  </td>
                   <td className="px-4 py-2.5">
                     <span className={`rounded-full px-2 py-0.5 text-[11px] ${key.active ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
                       {key.active ? "启用" : "已吊销"}
