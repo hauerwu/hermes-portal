@@ -114,6 +114,14 @@ export default function InstanceDetailPage() {
           className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800 disabled:opacity-40">
           <Terminal className="h-3.5 w-3.5" /> 容器日志
         </button>
+        <a
+          href={`/instances/${instanceId}/dashboard/`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-zinc-950 hover:bg-amber-400"
+        >
+          <ExternalLink className="h-3.5 w-3.5" /> 打开 Dashboard
+        </a>
         <button onClick={() => setEditOpen(true)}
           className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800">
           <Pencil className="h-3.5 w-3.5" /> 编辑

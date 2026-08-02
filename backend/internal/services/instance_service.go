@@ -142,12 +142,55 @@ func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode,
 			return nil, fmt.Errorf("container start failed: %w", err)
 		}
 		inst.Status = models.StatusStarting
+		inst.ContainerName = ContainerName(inst.ID)
 		s.db.Model(inst).Updates(map[string]any{"status": models.StatusStarting, "container_name": inst.ContainerName})
+		// Asynchronously probe readiness so the status transitions
+		// starting → running without requiring a page refresh.
+		go s.waitReady(context.Background(), inst)
 	} else {
 		inst.Status = models.StatusRunning
 		s.db.Model(inst).Update("status", models.StatusRunning)
 	}
 	return inst, nil
+}
+
+// waitReady polls the instance dashboard until it becomes healthy, then
+// lets Health() persist the running status. Gives up silently after a
+// timeout — the page-level polling keeps trying afterwards.
+func (s *InstanceService) waitReady(ctx context.Context, inst *models.Instance) {
+	deadline := time.Now().Add(180 * time.Second)
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if time.Now().After(deadline) {
+			log.Printf("[portal] instance %d readiness probe timed out (status stays %s)",
+				inst.ID, models.StatusStarting)
+			return
+		}
+
+		var fresh models.Instance
+		if err := s.db.First(&fresh, inst.ID).Error; err != nil {
+			return
+		}
+		// User stopped / destroyed it meanwhile.
+		if fresh.Status == models.StatusStopped || fresh.Status == models.StatusDestroyed {
+			return
+		}
+		result := s.Health(ctx, &fresh)
+		if ok, _ := result["ok"].(bool); ok {
+			return // Health() already persisted status=running
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func (s *InstanceService) startContainer(ctx context.Context, inst *models.Instance, cfg models.InstanceConfig) error {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
   Boxes,
+  ExternalLink,
   Loader2,
   Play,
   Plus,
@@ -41,6 +42,24 @@ export default function InstancesPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // 每 15 秒静默轮询健康状态：starting → running 自动流转，无需进入详情页。
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      try {
+        const list = await api.listInstances();
+        await Promise.all(
+          list
+            .filter((i) => i.status === "starting" || i.status === "running")
+            .map((i) => api.instanceHealth(i.id).catch(() => null))
+        );
+        setInstances(await api.listInstances());
+      } catch {
+        /* 静默 */
+      }
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   const act = async (inst: Instance, action: "start" | "stop" | "restart") => {
     await api.instanceAction(inst.id, action);
@@ -95,9 +114,11 @@ export default function InstancesPage() {
                 <Link to={`/instances/${inst.id}`} className="font-medium hover:text-amber-300">
                   {inst.name}
                 </Link>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] ${statusColor[inst.status] || "bg-zinc-800 text-zinc-400"}`}>
-                  {inst.status}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] ${statusColor[inst.status] || "bg-zinc-800 text-zinc-400"}`}>
+                    {inst.status}
+                  </span>
+                </div>
               </div>
               <div className="mb-3 space-y-0.5 text-xs text-zinc-500">
                 <div>slug: {inst.slug}</div>
@@ -105,6 +126,17 @@ export default function InstancesPage() {
                   {inst.mode === "docker" ? `容器 ${inst.container_name}` : `远程 ${inst.remote_url}`}
                 </div>
                 <div className="truncate">image: {inst.image || "-"}</div>
+              </div>
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                <a
+                  href={`/instances/${inst.id}/dashboard/`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-amber-500/15 px-2 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/25"
+                  title="打开该实例的 Hermes Dashboard（新标签页）"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> 打开 Dashboard
+                </a>
               </div>
               <div className="flex gap-1.5">
                 <button
