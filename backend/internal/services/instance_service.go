@@ -121,6 +121,7 @@ func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode,
 	}
 	cfg.ExtraEnv = extraEnv
 	cfg.DefaultModel = defaultModel
+	ApplyProviderEnv(&cfg)
 
 	inst := &models.Instance{
 		TenantID:   tenantID,
@@ -158,6 +159,66 @@ func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode,
 		s.db.Model(inst).Update("status", models.StatusRunning)
 	}
 	return inst, nil
+}
+
+// providerEnvVars maps hermes built-in provider ids to the environment
+// variable their credentials are read from (hermes_cli/auth.py
+// ProviderConfig.api_key_env_vars). Built-in providers ignore
+// model.api_key in config.yaml — the key MUST be present in the container
+// environment (e.g. DEEPSEEK_API_KEY).
+var providerEnvVars = map[string]string{
+	"openai":        "OPENAI_API_KEY",
+	"openai-api":    "OPENAI_API_KEY",
+	"openrouter":    "OPENROUTER_API_KEY",
+	"anthropic":     "ANTHROPIC_API_KEY",
+	"gemini":        "GOOGLE_API_KEY",
+	"deepseek":      "DEEPSEEK_API_KEY",
+	"xai":           "XAI_API_KEY",
+	"zai":           "GLM_API_KEY",
+	"minimax":       "MINIMAX_API_KEY",
+	"minimax-cn":    "MINIMAX_CN_API_KEY",
+	"nvidia":        "NVIDIA_API_KEY",
+	"huggingface":   "HF_TOKEN",
+	"ollama-cloud":  "OLLAMA_API_KEY",
+	"alibaba":       "DASHSCOPE_API_KEY",
+	"qwen":          "DASHSCOPE_API_KEY",
+	"kimi":          "KIMI_API_KEY",
+	"kimi-coding":   "KIMI_API_KEY",
+	"moonshot":      "KIMI_API_KEY",
+	"groq":          "GROQ_API_KEY",
+	"mistral":       "MISTRAL_API_KEY",
+	"lmstudio":      "LM_API_KEY",
+	"ai-gateway":    "AI_GATEWAY_API_KEY",
+	"azure-foundry": "AZURE_FOUNDRY_API_KEY",
+	"arcee":         "ARCEEAI_API_KEY",
+	"xiaomi":        "XIAOMI_API_KEY",
+	"kilocode":      "KILOCODE_API_KEY",
+	"stepfun":       "STEPFUN_API_KEY",
+	"opencode-zen":  "OPENCODE_ZEN_API_KEY",
+	"opencode-go":   "OPENCODE_GO_API_KEY",
+}
+
+// ApplyProviderEnv injects the default-model's API key into the instance's
+// extra_env under the env var the hermes provider reads (DEEPSEEK_API_KEY,
+// OPENAI_API_KEY, …). Built-in providers resolve credentials ONLY from the
+// environment; model.api_key in config.yaml is honored only on the custom /
+// azure-foundry paths. custom (and empty provider) is intentionally skipped
+// — those use model.api_key + model.base_url from config.yaml.
+func ApplyProviderEnv(cfg *models.InstanceConfig) {
+	dm := cfg.DefaultModel
+	if dm == nil || strings.TrimSpace(dm.Key) == "" {
+		return
+	}
+	envName := providerEnvVars[strings.ToLower(strings.TrimSpace(dm.Provider))]
+	if envName == "" {
+		return
+	}
+	if cfg.ExtraEnv == nil {
+		cfg.ExtraEnv = map[string]string{}
+	}
+	if _, exists := cfg.ExtraEnv[envName]; !exists {
+		cfg.ExtraEnv[envName] = dm.Key
+	}
 }
 
 // waitReady polls the instance dashboard until it becomes healthy, then

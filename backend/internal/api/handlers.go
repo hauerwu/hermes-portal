@@ -515,6 +515,7 @@ func (a *API) UpdateInstance(c *gin.Context) {
 		} else {
 			cfg.DefaultModel = body.DefaultModel
 		}
+		services.ApplyProviderEnv(&cfg)
 		instance.Config = security.MarshalJSON(cfg)
 		changed = true
 	}
@@ -533,6 +534,7 @@ func (a *API) UpdateInstance(c *gin.Context) {
 		cfg.DefaultModel = &models.DefaultModel{
 			URL: lib.URL, Model: lib.Model, Key: lib.Key, Provider: lib.Provider,
 		}
+		services.ApplyProviderEnv(&cfg)
 		instance.Config = security.MarshalJSON(cfg)
 		instance.ModelID = body.ModelID
 		changed = true
