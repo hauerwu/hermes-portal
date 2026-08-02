@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Copy, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
+import ApiDoc from "@/components/ApiDoc";
 import Modal from "@/components/Modal";
 import { useConfirm } from "@/lib/confirm";
 import { api, type ApiKey, type Instance } from "@/lib/api";
@@ -58,6 +59,8 @@ export default function ApiKeysPage() {
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-800 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
+
+      <ApiDoc />
 
       {loading ? (
         <div className="flex justify-center py-16 text-zinc-500">
