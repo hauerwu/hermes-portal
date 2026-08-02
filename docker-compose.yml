@@ -1,0 +1,56 @@
+#
+# Hermes Portal — docker-compose
+#
+# The portal manages local hermes-agent instances by talking to the host
+# Docker daemon through /var/run/docker.sock. It joins a dedicated bridge
+# network (hermes-portal-net); every local instance it creates is attached
+# to the same network so the portal reaches them by container name.
+#
+# Build the hermes-agent image first (from the sibling hermes-agent repo):
+#   docker build -t hermes-agent ../hermes-agent
+# or pull a prebuilt image and set PORTAL_HERMES_IMAGE accordingly.
+#
+services:
+  portal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hermes-portal
+    container_name: hermes-portal
+    restart: unless-stopped
+    ports:
+      - "${PORTAL_PORT:-8080}:8080"
+    environment:
+      PORTAL_APP_NAME: Hermes Portal
+      PORTAL_DEBUG: "${PORTAL_DEBUG:-false}"
+      PORTAL_PUBLIC_BASE_URL: "${PORTAL_PUBLIC_BASE_URL:-http://localhost:8080}"
+      PORTAL_JWT_SECRET: "${PORTAL_JWT_SECRET:?set PORTAL_JWT_SECRET}"
+      PORTAL_ADMIN_USERNAME: "${PORTAL_ADMIN_USERNAME:-admin}"
+      PORTAL_ADMIN_PASSWORD: "${PORTAL_ADMIN_PASSWORD:?set PORTAL_ADMIN_PASSWORD}"
+      # local instance runtime
+      PORTAL_HERMES_IMAGE: "${PORTAL_HERMES_IMAGE:-hermes-agent}"
+      PORTAL_HERMES_NETWORK: hermes-portal-net
+      PORTAL_HERMES_UID: "${PORTAL_HERMES_UID:-1000}"
+      PORTAL_HERMES_GID: "${PORTAL_HERMES_GID:-1000}"
+      # OIDC SSO (optional)
+      PORTAL_OIDC_ENABLED: "${PORTAL_OIDC_ENABLED:-false}"
+      PORTAL_OIDC_ISSUER: "${PORTAL_OIDC_ISSUER:-}"
+      PORTAL_OIDC_CLIENT_ID: "${PORTAL_OIDC_CLIENT_ID:-}"
+      PORTAL_OIDC_CLIENT_SECRET: "${PORTAL_OIDC_CLIENT_SECRET:-}"
+      PORTAL_OIDC_AUTO_PROVISION: "${PORTAL_OIDC_AUTO_PROVISION:-false}"
+    volumes:
+      - portal-data:/app/data
+      # Docker socket: required for creating/starting/stopping/destroying
+      # local hermes instances. Mount read-write (the daemon itself enforces
+      # permissions).
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - hermes-portal-net
+
+volumes:
+  portal-data:
+
+networks:
+  hermes-portal-net:
+    name: hermes-portal-net
+    driver: bridge

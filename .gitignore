@@ -1,0 +1,20 @@
+# Go
+backend/bin/
+backend/portal
+*.test
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Data / secrets
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
