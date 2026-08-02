@@ -140,7 +140,7 @@ function CodeBlock({ title, code }: { title: string; code: string }) {
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-800">
       <div className="border-b border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-xs font-medium text-zinc-400">{title}</div>
-      <pre className="overflow-x-auto bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-300">{code}</pre>
+      <pre className="overflow-x-auto bg-neutral-950 p-3 font-mono text-[11px] leading-relaxed text-neutral-300">{code}</pre>
     </div>
   );
 }

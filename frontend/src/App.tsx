@@ -9,12 +9,15 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Moon,
   Settings,
   Shield,
+  Sun,
   Users,
 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ConfirmProvider } from "@/lib/confirm";
+import { getTheme, toggleTheme, type Theme } from "@/lib/theme";
 import LoginPage from "@/pages/LoginPage";
 import SSOCallbackPage from "@/pages/SSOCallbackPage";
 import InstancesPage from "@/pages/InstancesPage";
@@ -33,6 +36,7 @@ function Shell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "1");
+  const [theme, setTheme] = useState<Theme>(getTheme);
 
   if (!user) return <Navigate to="/auth/login" replace />;
 
@@ -76,13 +80,22 @@ function Shell() {
               </div>
             )}
           </div>
-          <button
-            onClick={toggleSidebar}
-            className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-            title={collapsed ? "展开菜单" : "收起菜单"}
-          >
-            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              onClick={() => setTheme(toggleTheme())}
+              className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+              title={theme === "dark" ? "切换为浅色风格" : "切换为深色风格"}
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button
+              onClick={toggleSidebar}
+              className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+              title={collapsed ? "展开菜单" : "收起菜单"}
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
 
         {/* ── 导航菜单 ── */}

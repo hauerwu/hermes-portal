@@ -65,7 +65,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               className={`rounded-md px-4 py-1.5 text-sm font-medium ${
                 state.opts.danger
                   ? "bg-red-600 text-white hover:bg-red-500"
-                  : "bg-amber-500 text-zinc-950 hover:bg-amber-400"
+                  : "bg-amber-500 text-black hover:bg-amber-400"
               }`}
             >
               {state.opts.confirmText ?? "确认"}

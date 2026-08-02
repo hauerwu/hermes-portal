@@ -125,7 +125,7 @@ export default function InstanceDetailPage() {
         </button>
         <Link
           to={`/instances/${instanceId}/dashboard`}
-          className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-zinc-950 hover:bg-amber-400"
+          className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-black hover:bg-amber-400"
         >
           <ExternalLink className="h-3.5 w-3.5" /> 打开 Dashboard
         </Link>
@@ -140,12 +140,12 @@ export default function InstanceDetailPage() {
       </div>
 
       {showLogs && (
-        <div className="mb-4 rounded-lg border border-zinc-800 bg-black/60 p-3">
+        <div className="mb-4 rounded-lg border border-neutral-800 bg-neutral-950/90 p-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs text-zinc-400">容器日志（最近 500 行）</span>
             <button onClick={() => setShowLogs(false)} className="text-xs text-zinc-500 hover:text-zinc-300">关闭</button>
           </div>
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-zinc-300">{logs}</pre>
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-neutral-300">{logs}</pre>
         </div>
       )}
 
@@ -424,7 +424,7 @@ function EditInstanceModal({
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="rounded-md border border-zinc-700 px-4 py-1.5 text-sm hover:bg-zinc-800">取消</button>
             <button type="submit" disabled={busy}
-              className="flex items-center gap-1.5 rounded-md bg-amber-500 px-4 py-1.5 text-sm font-medium text-zinc-950 hover:bg-amber-400 disabled:opacity-50">
+              className="flex items-center gap-1.5 rounded-md bg-amber-500 px-4 py-1.5 text-sm font-medium text-black hover:bg-amber-400 disabled:opacity-50">
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} 保存
             </button>
           </div>

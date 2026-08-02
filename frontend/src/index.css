@@ -8,6 +8,34 @@ body {
   @apply bg-zinc-950 text-zinc-100 antialiased;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ── 主题：深色（默认，走 Tailwind zinc 色板）与浅色 ──────────────────
+ * 组件全部使用 zinc-* / amber-* 等语义色板，主题切换通过覆盖 CSS 变量
+ * 实现，无需改动任何组件类名。 */
+[data-theme="light"] {
+  /* zinc 色阶语义反转：950=背景(白) … 100=主文字(深) */
+  --color-zinc-950: #fafafa;
+  --color-zinc-900: #f4f4f5;
+  --color-zinc-800: #e4e4e7;
+  --color-zinc-700: #d4d4d8;
+  --color-zinc-600: #b3b3ba;
+  --color-zinc-500: #71717a;
+  --color-zinc-400: #52525b;
+  --color-zinc-300: #3f3f46;
+  --color-zinc-200: #27272a;
+  --color-zinc-100: #18181b;
+  --color-zinc-50: #09090b;
+  /* 强调色上端变深，保证浅色底上可读 */
+  --color-amber-300: #d97706;
+  --color-amber-400: #b45309;
+  --color-emerald-300: #059669;
+  --color-emerald-400: #047857;
+  --color-sky-300: #0284c7;
+  --color-sky-400: #0369a1;
+  --color-red-300: #dc2626;
+  --color-red-400: #b91c1c;
 }
 
 @keyframes fade-in {

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import { api } from "@/lib/api";
+import { applyTheme, getTheme, type Theme } from "@/lib/theme";
 
 export default function SettingsPage() {
   const [oidc, setOidc] = useState<{ enabled: boolean; issuer: string; admin_claim?: string; auto_provision?: boolean } | null>(null);
   const [docker, setDocker] = useState(false);
+  const [theme, setTheme] = useState<Theme>(getTheme);
 
   useEffect(() => {
     api.oidcStatus().then(setOidc).catch(() => {});
@@ -19,6 +21,33 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-4">
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+          <h2 className="mb-3 text-sm font-semibold">界面风格</h2>
+          <p className="mb-3 text-sm text-zinc-400">选择 portal 的显示风格，选择会立即生效并记住。</p>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => { setTheme("dark"); applyTheme("dark"); }}
+              className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+                theme === "dark"
+                  ? "border-amber-500 bg-amber-500/10 text-amber-300"
+                  : "border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+              }`}
+            >
+              <Moon className="h-4 w-4" /> 深色风格
+            </button>
+            <button
+              onClick={() => { setTheme("light"); applyTheme("light"); }}
+              className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+                theme === "light"
+                  ? "border-amber-500 bg-amber-500/10 text-amber-300"
+                  : "border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+              }`}
+            >
+              <Sun className="h-4 w-4" /> 浅色风格
+            </button>
+          </div>
+        </section>
+
         <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
           <h2 className="mb-3 text-sm font-semibold">OIDC 单点登录</h2>
           <p className="mb-3 text-sm text-zinc-400">
