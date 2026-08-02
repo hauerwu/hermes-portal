@@ -11,6 +11,7 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
+import Modal from "@/components/Modal";
 import { api, type GatewayUrls, type HealthResult, type Instance, type ModelConfig } from "@/lib/api";
 
 export default function InstanceDetailPage() {
@@ -282,10 +283,8 @@ function EditInstanceModal({
   const envPairs = Object.entries(extraEnv);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="max-h-[85vh] w-full max-w-lg overflow-auto rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="mb-4 text-lg font-semibold">编辑实例</h2>
-        <form onSubmit={submit} className="space-y-4">
+    <Modal open onClose={onClose} title="编辑实例" width="max-w-lg">
+      <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs text-zinc-400">名称</label>
@@ -421,8 +420,7 @@ function EditInstanceModal({
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} 保存
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }

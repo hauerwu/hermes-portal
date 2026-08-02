@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Trash2, Users as UsersIcon } from "lucide-react";
+import Modal from "@/components/Modal";
 import { api, type User } from "@/lib/api";
 
 const roleLabel: Record<string, string> = {
@@ -125,10 +126,8 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="mb-4 text-lg font-semibold">新建用户</h2>
-        <form onSubmit={submit} className="space-y-4">
+    <Modal open onClose={onClose} title="新建用户">
+      <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="mb-1 block text-xs text-zinc-400">用户名</label>
             <input value={username} onChange={(e) => setUsername(e.target.value)} required
@@ -160,8 +159,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} 创建
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }

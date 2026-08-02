@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Cpu, Loader2, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import Modal from "@/components/Modal";
 import { api, type ModelConfig } from "@/lib/api";
 
 const providerLabel: Record<string, string> = {
@@ -161,10 +162,8 @@ function ModelModal({ model, onClose, onSaved }: { model: ModelConfig | null; on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="mb-4 text-lg font-semibold">{model ? "编辑模型" : "新建模型"}</h2>
-        <form onSubmit={submit} className="space-y-4">
+    <Modal open onClose={onClose} title={model ? "编辑模型" : "新建模型"}>
+      <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs text-zinc-400">显示名称</label>
@@ -212,8 +211,7 @@ function ModelModal({ model, onClose, onSaved }: { model: ModelConfig | null; on
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} 保存
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }

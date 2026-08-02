@@ -10,6 +10,7 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
+import Modal from "@/components/Modal";
 import { api, type Instance, type ModelConfig } from "@/lib/api";
 
 const statusColor: Record<string, string> = {
@@ -232,10 +233,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="mb-4 text-lg font-semibold">新建实例</h2>
-        <form onSubmit={submit} className="space-y-4">
+    <Modal open onClose={onClose} title="新建实例">
+      <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -335,8 +334,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} 创建
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }

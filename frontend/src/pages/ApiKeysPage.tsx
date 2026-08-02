@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Copy, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
+import Modal from "@/components/Modal";
 import { api, type ApiKey, type Instance } from "@/lib/api";
 
 export default function ApiKeysPage() {
@@ -147,11 +148,9 @@ function CreateKeyModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
-        {newKey ? (
+    <Modal open onClose={onClose} title={newKey ? "Key 创建成功" : "新建 API Key"}>
+      {newKey ? (
           <div>
-            <h2 className="mb-3 text-lg font-semibold">Key 创建成功</h2>
             <p className="mb-2 text-xs text-amber-300">请立即复制保存，明文只显示这一次：</p>
             <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-700/60 bg-amber-500/10 p-3">
               <code className="flex-1 break-all font-mono text-sm text-amber-200">{newKey}</code>
@@ -175,7 +174,6 @@ function CreateKeyModal({
           </div>
         ) : (
           <>
-            <h2 className="mb-4 text-lg font-semibold">新建 API Key</h2>
             <form onSubmit={submit} className="space-y-4">
               <div>
                 <label className="mb-1 block text-xs text-zinc-400">名称</label>
@@ -206,7 +204,6 @@ function CreateKeyModal({
             </form>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

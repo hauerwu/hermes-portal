@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Shield, Trash2 } from "lucide-react";
+import Modal from "@/components/Modal";
 import { api, type Tenant } from "@/lib/api";
 
 export default function TenantsPage() {
@@ -106,13 +107,11 @@ function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCrea
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-center gap-2">
-          <Shield className="h-5 w-5 text-amber-400" />
-          <h2 className="text-lg font-semibold">新建租户</h2>
-        </div>
-        <form onSubmit={submit} className="space-y-4">
+    <Modal open onClose={onClose} title="新建租户">
+      <div className="mb-3 flex items-center gap-2 text-amber-400">
+        <Shield className="h-4 w-4" />
+      </div>
+      <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="mb-1 block text-xs text-zinc-400">名称</label>
             <input value={name} onChange={(e) => setName(e.target.value)} required
@@ -136,8 +135,7 @@ function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCrea
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} 创建
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
