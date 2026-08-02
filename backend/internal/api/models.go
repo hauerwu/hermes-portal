@@ -8,7 +8,13 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -199,4 +205,136 @@ func publicModelConfig(m *models.ModelConfig) gin.H {
 		"is_default": m.IsDefault,
 		"created_at": m.CreatedAt,
 	}
+}
+
+// ── Model endpoint test ────────────────────────────────────────────────
+
+// TestModel verifies connectivity + credentials against the model's
+// OpenAI-compatible endpoint: a minimal 1-token chat completion first,
+// falling back to GET /models for endpoints that reject chat requests.
+func (a *API) TestModel(c *gin.Context) {
+	id := mustID(c)
+	actor := middleware.CurrentUser(c)
+	var m models.ModelConfig
+	if err := a.db.First(&m, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "model not found"})
+		return
+	}
+	if actor.Role != models.RoleSuperAdmin && m.TenantID != *actor.TenantID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "model belongs to another tenant"})
+		return
+	}
+	result := testOpenAIEndpoint(m.URL, m.Key, m.Model)
+	detail := "ok"
+	if !result["ok"].(bool) {
+		detail, _ = result["error"].(string)
+	}
+	database.Audit(a.db, &actor.ID, &m.TenantID, "model_test", m.Name, detail, middleware.ClientIP(c))
+	c.JSON(http.StatusOK, result)
+}
+
+// testOpenAIEndpoint performs the live probe (no secrets returned).
+func testOpenAIEndpoint(baseURL, key, model string) map[string]any {
+	start := time.Now()
+	elapsed := func() int64 { return time.Since(start).Milliseconds() }
+	base := strings.TrimRight(baseURL, "/")
+
+	client := &http.Client{Timeout: 20 * time.Second}
+
+	// 1) Minimal chat completion (max_tokens=1).
+	payload, _ := json.Marshal(map[string]any{
+		"model":      model,
+		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
+		"max_tokens": 1,
+		"stream":     false,
+	})
+	req, err := http.NewRequest(http.MethodPost, base+"/chat/completions", bytes.NewReader(payload))
+	if err == nil {
+		req.Header.Set("Content-Type", "application/json")
+		if key != "" {
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+		resp, doErr := client.Do(req)
+		if doErr != nil {
+			return map[string]any{"ok": false, "error": "连接失败: " + doErr.Error(), "elapsed_ms": elapsed()}
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return map[string]any{"ok": true, "method": "chat_completions", "elapsed_ms": elapsed()}
+		}
+		// Fall through to /models probe for 400/404/405 endpoints.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return map[string]any{
+				"ok": false, "status": resp.StatusCode,
+				"error": "认证失败（HTTP " + itoa(resp.StatusCode) + "）：检查 API Key", "elapsed_ms": elapsed(),
+			}
+		}
+		_ = body // keep parseable error below
+	}
+
+	// 2) Fallback: GET /models.
+	req2, err2 := http.NewRequest(http.MethodGet, base+"/models", nil)
+	if err2 == nil {
+		if key != "" {
+			req2.Header.Set("Authorization", "Bearer "+key)
+		}
+		resp2, doErr := client.Do(req2)
+		if doErr != nil {
+			return map[string]any{"ok": false, "error": "连接失败: " + doErr.Error(), "elapsed_ms": elapsed()}
+		}
+		body2, _ := io.ReadAll(io.LimitReader(resp2.Body, 2048))
+		resp2.Body.Close()
+		if resp2.StatusCode == http.StatusOK {
+			return map[string]any{"ok": true, "method": "models", "elapsed_ms": elapsed()}
+		}
+		if resp2.StatusCode == http.StatusUnauthorized || resp2.StatusCode == http.StatusForbidden {
+			return map[string]any{
+				"ok": false, "status": resp2.StatusCode,
+				"error": "认证失败（HTTP " + itoa(resp2.StatusCode) + "）：检查 API Key", "elapsed_ms": elapsed(),
+			}
+		}
+		return map[string]any{
+			"ok": false, "status": resp2.StatusCode,
+			"error":      "端点不可用（HTTP " + itoa(resp2.StatusCode) + "）：" + extractAPIError(body2),
+			"elapsed_ms": elapsed(),
+		}
+	}
+
+	return map[string]any{"ok": false, "error": "无法构造测试请求", "elapsed_ms": elapsed()}
+}
+
+func extractAPIError(body []byte) string {
+	// OpenAI-style error envelope: {"error": {"message": "..."}} or {"error": "..."}
+	var envelope struct {
+		Error json.RawMessage `json:"error"`
+	}
+	if json.Unmarshal(body, &envelope) == nil && len(envelope.Error) > 0 {
+		var msgObj struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(envelope.Error, &msgObj) == nil && msgObj.Message != "" {
+			return truncateStr(msgObj.Message, 200)
+		}
+		var msgStr string
+		if json.Unmarshal(envelope.Error, &msgStr) == nil && msgStr != "" {
+			return truncateStr(msgStr, 200)
+		}
+	}
+	plain := strings.TrimSpace(string(body))
+	if plain != "" {
+		return truncateStr(plain, 200)
+	}
+	return "无响应内容"
+}
+
+func truncateStr(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+func itoa(v int) string {
+	return strconv.Itoa(v)
 }

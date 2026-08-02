@@ -223,6 +223,11 @@ export const api = {
     request<ModelConfig>(`/api/models/${id}`, { method: "PUT", body: JSON.stringify(b) }),
   setDefaultModel: (id: number) =>
     request<ModelConfig>(`/api/models/${id}/default`, { method: "POST" }),
+  testModel: (id: number) =>
+    request<{ ok: boolean; method?: string; elapsed_ms?: number; status?: number; error?: string }>(
+      `/api/models/${id}/test`,
+      { method: "POST" }
+    ),
   deleteModel: (id: number) => request<{ ok: boolean }>(`/api/models/${id}`, { method: "DELETE" }),
 
   // audit

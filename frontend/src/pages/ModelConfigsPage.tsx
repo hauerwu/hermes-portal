@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cpu, Loader2, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { Cpu, FlaskConical, Loader2, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
 import { useConfirm } from "@/lib/confirm";
 import { api, type ModelConfig } from "@/lib/api";
@@ -21,6 +21,7 @@ export default function ModelConfigsPage() {
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<ModelConfig | null>(null);
+  const [testing, setTesting] = useState<Record<number, "loading" | { ok: boolean; label: string }>>({});
 
   const load = useCallback(async () => {
     try {
@@ -54,6 +55,29 @@ export default function ModelConfigsPage() {
     load();
   };
 
+  const runTest = async (m: ModelConfig) => {
+    setTesting((prev) => ({ ...prev, [m.id]: "loading" }));
+    try {
+      const res = await api.testModel(m.id);
+      setTesting((prev) => ({
+        ...prev,
+        [m.id]: res.ok
+          ? { ok: true, label: `✓ 可用（${res.method ?? "chat"} · ${res.elapsed_ms ?? 0}ms）` }
+          : { ok: false, label: `✗ ${res.error ?? `HTTP ${res.status ?? "?"}`}` },
+      }));
+    } catch (e: any) {
+      setTesting((prev) => ({ ...prev, [m.id]: { ok: false, label: `✗ ${e.message}` } }));
+    }
+    // 保留结果 8 秒后自动清除
+    setTimeout(() => {
+      setTesting((prev) => {
+        const next = { ...prev };
+        delete next[m.id];
+        return next;
+      });
+    }, 8000);
+  };
+
   return (
     <div className="mx-auto max-w-5xl p-6">
       <div className="mb-5 flex items-center justify-between">
@@ -79,7 +103,9 @@ export default function ModelConfigsPage() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {models.map((m) => (
+          {models.map((m) => {
+            const testState = testing[m.id];
+            return (
             <div
               key={m.id}
               className={`rounded-xl border p-4 ${m.is_default ? "border-amber-600/60 bg-amber-500/5" : "border-zinc-800 bg-zinc-900/60"}`}
@@ -94,6 +120,18 @@ export default function ModelConfigsPage() {
                   )}
                 </div>
                 <div className="flex gap-1">
+                  <button
+                    onClick={() => runTest(m)}
+                    disabled={testing[m.id] === "loading"}
+                    className="rounded-md p-1.5 text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
+                    title="测试端点连通性与凭证"
+                  >
+                    {testing[m.id] === "loading" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <FlaskConical className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                   <button onClick={() => setEditing(m)} className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="编辑">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -114,6 +152,17 @@ export default function ModelConfigsPage() {
                     {m.has_key ? "● 已配置 Key" : "○ 无 Key"}
                   </span>
                 </div>
+                {testState && testState !== "loading" && (
+                  <div
+                    className={`mt-2 rounded-md border px-2 py-1 text-[11px] leading-relaxed break-all ${
+                      testState.ok
+                        ? "border-emerald-700/50 bg-emerald-500/10 text-emerald-300"
+                        : "border-red-800/60 bg-red-500/10 text-red-300"
+                    }`}
+                  >
+                    {testState.label}
+                  </div>
+                )}
               </div>
               {!m.is_default && (
                 <button
@@ -124,7 +173,8 @@ export default function ModelConfigsPage() {
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

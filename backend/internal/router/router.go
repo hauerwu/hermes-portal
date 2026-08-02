@@ -129,6 +129,7 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		modelLib.GET("", apiHandler.ListModels)
 		modelLib.POST("", middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin), apiHandler.CreateModel)
 		modelLib.PUT("/:id", middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin), apiHandler.UpdateModel)
+		modelLib.POST("/:id/test", middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin), apiHandler.TestModel)
 		modelLib.POST("/:id/default", middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin), apiHandler.SetDefaultModel)
 		modelLib.DELETE("/:id", middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin), apiHandler.DeleteModel)
 
