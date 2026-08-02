@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 
 /**
  * 通用模态窗口：
- *  - 遮罩点击 / ESC / 右上角 × 关闭
+ *  - ESC / 右上角 × 关闭（点击外部不会关闭，避免误操作丢失表单内容）
  *  - body 滚动锁定，打开时聚焦首个可聚焦元素
  *  - role="dialog" + aria-modal，淡入/缩放动画
  */
@@ -59,11 +59,9 @@ export default function Modal({
       aria-modal="true"
       aria-label={title}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
     >
       <div
         ref={panelRef}
-        onClick={(e) => e.stopPropagation()}
         className={`w-full ${width} max-h-[85vh] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl animate-modal-in`}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-800 bg-zinc-900/95 px-5 py-3.5 backdrop-blur">
