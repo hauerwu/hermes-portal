@@ -32,40 +32,39 @@ type oidcState struct {
 
 var oidcClient *oidcState
 
-// InitOIDC performs provider discovery; safe to call repeatedly.
-func (a *API) InitOIDC(cfg *config.Config) error {
-	if !cfg.OIDCEnabled || cfg.OIDCIssuer == "" || cfg.OIDCClientID == "" {
+// InitOIDC performs provider discovery; safe to call repeatedly (a Settings
+// page save re-invokes it to hot-reload the client).
+func (a *API) InitOIDC(cfg *config.Config, s *OIDCSettings) error {
+	if s == nil {
+		s = LoadOIDCSettings(a.db, cfg)
+	}
+	if !s.Enabled || s.Issuer == "" || s.ClientID == "" {
 		oidcClient = nil
+		log.Printf("[portal] OIDC disabled")
 		return nil
 	}
 	ctx := context.Background()
-	provider, err := oidc.NewProvider(ctx, cfg.OIDCIssuer)
+	provider, err := oidc.NewProvider(ctx, s.Issuer)
 	if err != nil {
 		log.Printf("[portal] OIDC discovery failed: %v", err)
 		return err
 	}
+	scopes := []string{oidc.ScopeOpenID, "profile", "email"}
+	if strings.TrimSpace(s.Scopes) != "" {
+		scopes = strings.FieldsFunc(s.Scopes, func(r rune) bool { return r == ' ' || r == ',' })
+	}
 	oidcClient = &oidcState{
 		provider: provider,
 		oauth: &oauth2.Config{
-			ClientID:     cfg.OIDCClientID,
-			ClientSecret: cfg.OIDCClientSecret,
+			ClientID:     s.ClientID,
+			ClientSecret: s.ClientSecret,
 			RedirectURL:  cfg.PublicBaseURL + "/api/auth/oidc/callback",
 			Endpoint:     provider.Endpoint(),
-			Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+			Scopes:       scopes,
 		},
 	}
-	log.Printf("[portal] OIDC enabled: %s", cfg.OIDCIssuer)
+	log.Printf("[portal] OIDC enabled: %s", s.Issuer)
 	return nil
-}
-
-func (a *API) OIDCStatus(c *gin.Context) {
-	enabled := oidcClient != nil
-	c.JSON(http.StatusOK, gin.H{
-		"enabled":        enabled,
-		"issuer":         a.cfg.OIDCIssuer,
-		"admin_claim":    a.cfg.OIDCAdminClaim,
-		"auto_provision": a.cfg.OIDCAutoProvision,
-	})
 }
 
 // isOIDCAdmin reports whether the ID token's admin claim is truthy.
@@ -172,17 +171,18 @@ func (a *API) OIDCCallback(c *gin.Context) {
 	// OIDC admin mapping: when PORTAL_OIDC_ADMIN_CLAIM is configured and its
 	// value is truthy for this user, the SSO user gets tenant_admin (existing
 	// members are upgraded on login, never downgraded).
+	sso := LoadOIDCSettings(a.db, a.cfg)
 	targetRole := models.RoleMember
-	if isOIDCAdmin(idToken, a.cfg.OIDCAdminClaim) {
+	if isOIDCAdmin(idToken, sso.AdminClaim) {
 		targetRole = models.RoleTenantAdmin
 	}
-	issuer := a.cfg.OIDCIssuer
+	issuer := sso.Issuer
 
 	var user models.User
 	err = a.db.Where("oidc_sub = ? AND oidc_issuer = ?", claims.Sub, issuer).First(&user).Error
 	if err != nil {
 		// Unknown SSO user: auto-provision or reject.
-		if !a.cfg.OIDCAutoProvision {
+		if !sso.AutoProvision {
 			c.JSON(http.StatusForbidden, gin.H{"error": "SSO user not provisioned in portal"})
 			return
 		}

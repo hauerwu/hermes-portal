@@ -181,6 +181,23 @@ export const api = {
   me: () => request<User>("/api/auth/me"),
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
   oidcStatus: () => request<{ enabled: boolean; issuer: string }>("/api/auth/oidc/status"),
+  getOidcSettings: () =>
+    request<{
+      enabled: boolean;
+      issuer: string;
+      client_id: string;
+      client_secret: string;
+      scopes: string;
+      admin_claim: string;
+      auto_provision: boolean;
+      redirect_uri: string;
+      editable: boolean;
+    }>("/api/settings/oidc"),
+  updateOidcSettings: (b: Record<string, unknown>) =>
+    request<{ ok: boolean; discovery_ok: boolean; error?: string }>("/api/settings/oidc", {
+      method: "PUT",
+      body: JSON.stringify(b),
+    }),
   ssoExchange: (accessToken: string, refreshToken: string) =>
     request<{ user: User }>("/api/auth/sso/exchange", {
       method: "POST",

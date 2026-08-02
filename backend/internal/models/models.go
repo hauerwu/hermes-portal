@@ -152,3 +152,9 @@ type AuditLog struct {
 	IP        string    `gorm:"size:64"`
 	CreatedAt time.Time `gorm:"index"`
 }
+
+// PortalSetting is a key-value settings row (e.g. OIDC SSO config).
+type PortalSetting struct {
+	Key   string `gorm:"primaryKey;size:64"`
+	Value string `gorm:"type:text;not null"`
+}

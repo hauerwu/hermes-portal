@@ -42,7 +42,8 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	cache := services.NewDashboardSessionCache(cfg, db)
 	svc := services.NewInstanceService(cfg, db, docker, cache)
 	apiHandler := api.New(cfg, db, docker, cache, svc)
-	apiHandler.InitOIDC(cfg)
+	// OIDC config is page-managed (SQLite); env vars are the initial default.
+	apiHandler.InitOIDC(cfg, nil)
 
 	dashboardProxy := proxy.NewDashboardProxy(cfg, db, cache)
 	gatewayProxy := proxy.NewGatewayProxy(cfg, db)
@@ -54,6 +55,8 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	r.POST("/api/auth/login", apiHandler.Login)
 	r.POST("/api/auth/refresh", apiHandler.Refresh)
 	r.GET("/api/auth/oidc/status", apiHandler.OIDCStatus)
+	r.GET("/api/settings/oidc", auth, apiHandler.OIDCGetSettings)
+	r.PUT("/api/settings/oidc", auth, apiHandler.OIDCUpdateSettings)
 	r.GET("/api/auth/oidc/authorize", apiHandler.OIDCAuthorize)
 	r.GET("/api/auth/oidc/callback", apiHandler.OIDCCallback)
 	r.POST("/api/auth/sso/exchange", apiHandler.SSOTokenExchange)
