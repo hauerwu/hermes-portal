@@ -1,11 +1,13 @@
+import { useState } from "react";
 import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router";
 import {
   Boxes,
-  GitBranch,
   History,
   KeyRound,
   LayoutDashboard,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   Shield,
   Users,
@@ -22,10 +24,21 @@ import TenantsPage from "@/pages/TenantsPage";
 import AuditLogsPage from "@/pages/AuditLogsPage";
 import SettingsPage from "@/pages/SettingsPage";
 
+const SIDEBAR_KEY = "portal.sidebar.collapsed";
+
 function Shell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "1");
+
   if (!user) return <Navigate to="/auth/login" replace />;
+
+  const toggleSidebar = () => {
+    setCollapsed((v) => {
+      localStorage.setItem(SIDEBAR_KEY, v ? "0" : "1");
+      return !v;
+    });
+  };
 
   const nav = [
     { to: "/instances", label: "实例管理", icon: Boxes },
@@ -38,52 +51,83 @@ function Shell() {
     { to: "/settings", label: "设置", icon: Settings },
   ];
 
+  const roleLabel =
+    user.role === "super_admin" ? "超级管理员" : user.role === "tenant_admin" ? "实例管理员" : "成员";
+
   return (
     <div className="flex h-full">
-      <aside className="w-56 shrink-0 border-r border-zinc-800 bg-zinc-900/60 flex flex-col">
-        <div className="flex items-center gap-2 px-4 py-4 border-b border-zinc-800">
-          <LayoutDashboard className="h-5 w-5 text-amber-400" />
-          <div>
-            <div className="font-semibold leading-tight">Hermes Portal</div>
-            <div className="text-[11px] text-zinc-500">{user.username}</div>
+      <aside
+        className={`${
+          collapsed ? "w-14" : "w-56"
+        } flex shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/60 transition-[width] duration-200 ease-in-out`}
+      >
+        {/* ── 顶栏：Logo + 收放按钮 ── */}
+        <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-3.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <LayoutDashboard className="h-5 w-5 shrink-0 text-amber-400" />
+            {!collapsed && (
+              <div className="min-w-0">
+                <div className="truncate font-semibold leading-tight">Hermes Portal</div>
+                <div className="truncate text-[11px] text-zinc-500">{user.username}</div>
+              </div>
+            )}
           </div>
+          <button
+            onClick={toggleSidebar}
+            className="shrink-0 rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+            title={collapsed ? "展开菜单" : "收起菜单"}
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
         </div>
-        <nav className="flex-1 px-2 py-3 space-y-1">
+
+        {/* ── 导航菜单 ── */}
+        <nav className="flex-1 space-y-1 px-2 py-3">
           {nav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
+              title={item.label}
               className={({ isActive }) =>
-                `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
+                `flex items-center gap-2.5 rounded-md py-2 text-sm transition-colors ${
+                  collapsed ? "justify-center px-0" : "px-3"
+                } ${
                   isActive
                     ? "bg-amber-500/15 text-amber-300"
                     : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                 }`
               }
             >
-              <item.icon className="h-4 w-4" />
-              {item.label}
+              <item.icon className="h-4 w-4 shrink-0" />
+              {!collapsed && <span className="truncate">{item.label}</span>}
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-zinc-800 px-4 py-3 space-y-2">
-          <div className="text-[11px] text-zinc-500">
-            角色：{user.role === "super_admin" ? "超级管理员" : user.role === "tenant_admin" ? "实例管理员" : "成员"}
-            {user.role !== "super_admin" && user.tenant_id != null && (
-              <div>租户 #{user.tenant_id}</div>
-            )}
-          </div>
+
+        {/* ── 底部：角色 + 退出 ── */}
+        <div className="space-y-2 border-t border-zinc-800 px-3 py-3">
+          {!collapsed && (
+            <div className="px-1 text-[11px] leading-relaxed text-zinc-500">
+              角色：{roleLabel}
+              {user.role !== "super_admin" && user.tenant_id != null && <div>租户 #{user.tenant_id}</div>}
+            </div>
+          )}
           <button
             onClick={async () => {
               await logout();
               navigate("/auth/login");
             }}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-red-300"
+            title="退出登录"
+            className={`flex w-full items-center gap-2 rounded-md py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-red-300 ${
+              collapsed ? "justify-center px-0" : "px-3"
+            }`}
           >
-            <LogOut className="h-4 w-4" /> 退出登录
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!collapsed && <span>退出登录</span>}
           </button>
         </div>
       </aside>
+
       <main className="flex-1 overflow-auto">
         <Routes>
           <Route path="/instances" element={<InstancesPage />} />
