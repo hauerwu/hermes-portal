@@ -15,6 +15,7 @@ import LoginPage from "@/pages/LoginPage";
 import SSOCallbackPage from "@/pages/SSOCallbackPage";
 import InstancesPage from "@/pages/InstancesPage";
 import InstanceDetailPage from "@/pages/InstanceDetailPage";
+import DashboardPage from "@/pages/DashboardPage";
 import ApiKeysPage from "@/pages/ApiKeysPage";
 import UsersPage from "@/pages/UsersPage";
 import TenantsPage from "@/pages/TenantsPage";
@@ -87,6 +88,7 @@ function Shell() {
         <Routes>
           <Route path="/instances" element={<InstancesPage />} />
           <Route path="/instances/:id" element={<InstanceDetailPage />} />
+          <Route path="/instances/:id/dashboard" element={<DashboardPage />} />
           <Route path="/apikeys" element={<ApiKeysPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/tenants" element={<TenantsPage />} />

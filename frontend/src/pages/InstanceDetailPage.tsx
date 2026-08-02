@@ -114,14 +114,12 @@ export default function InstanceDetailPage() {
           className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800 disabled:opacity-40">
           <Terminal className="h-3.5 w-3.5" /> 容器日志
         </button>
-        <a
-          href={`/instances/${instanceId}/dashboard/`}
-          target="_blank"
-          rel="noreferrer"
+        <Link
+          to={`/instances/${instanceId}/dashboard`}
           className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-zinc-950 hover:bg-amber-400"
         >
           <ExternalLink className="h-3.5 w-3.5" /> 打开 Dashboard
-        </a>
+        </Link>
         <button onClick={() => setEditOpen(true)}
           className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800">
           <Pencil className="h-3.5 w-3.5" /> 编辑
@@ -173,19 +171,14 @@ export default function InstanceDetailPage() {
 
       <div className="mb-2 flex items-center gap-3 text-sm">
         <button
-          onClick={() => setEmbed(true)}
+          onClick={() => setEmbed(!embed)}
           className={embed ? "font-medium text-amber-300" : "text-zinc-400 hover:text-zinc-200"}
         >
-          内嵌 Dashboard
+          {embed ? "隐藏内嵌预览" : "显示内嵌预览"}
         </button>
-        <a
-          href={`/instances/${instanceId}/dashboard/`}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-1 text-zinc-400 hover:text-zinc-200"
-        >
-          <ExternalLink className="h-3.5 w-3.5" /> 全屏打开
-        </a>
+        <Link to={`/instances/${instanceId}/dashboard`} className="text-zinc-400 hover:text-amber-300">
+          进入全屏 Dashboard 视图 →
+        </Link>
       </div>
 
       {embed && (

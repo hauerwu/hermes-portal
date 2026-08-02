@@ -128,15 +128,13 @@ export default function InstancesPage() {
                 <div className="truncate">image: {inst.image || "-"}</div>
               </div>
               <div className="mb-2 flex flex-wrap gap-1.5">
-                <a
-                  href={`/instances/${inst.id}/dashboard/`}
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  to={`/instances/${inst.id}/dashboard`}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-amber-500/15 px-2 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/25"
-                  title="打开该实例的 Hermes Dashboard（新标签页）"
+                  title="进入该实例的 Hermes Dashboard（内嵌视图）"
                 >
                   <ExternalLink className="h-3.5 w-3.5" /> 打开 Dashboard
-                </a>
+                </Link>
               </div>
               <div className="flex gap-1.5">
                 <button
