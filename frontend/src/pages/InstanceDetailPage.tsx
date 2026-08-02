@@ -12,9 +12,11 @@ import {
   Trash2,
 } from "lucide-react";
 import Modal from "@/components/Modal";
+import { useConfirm } from "@/lib/confirm";
 import { api, type GatewayUrls, type HealthResult, type Instance, type ModelConfig } from "@/lib/api";
 
 export default function InstanceDetailPage() {
+  const confirmDialog = useConfirm();
   const { id } = useParams();
   const instanceId = Number(id);
   const [inst, setInst] = useState<Instance | null>(null);
@@ -68,7 +70,13 @@ export default function InstanceDetailPage() {
   };
 
   const destroy = async () => {
-    if (!confirm(`确认销毁实例「${inst?.name}」？容器与数据卷将被删除。`)) return;
+    const ok = await confirmDialog({
+      title: "销毁实例",
+      message: <>确认销毁实例 <b className="text-amber-300">「{inst?.name}」</b>？<br />容器与数据卷将被删除，且不可恢复。</>,
+      confirmText: "销毁",
+      danger: true,
+    });
+    if (!ok) return;
     await api.destroyInstance(instanceId);
     window.location.hash = "#/instances";
   };

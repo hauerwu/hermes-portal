@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Shield, Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
+import { useConfirm } from "@/lib/confirm";
 import { api, type Tenant } from "@/lib/api";
 
 export default function TenantsPage() {
+  const confirmDialog = useConfirm();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -24,7 +26,13 @@ export default function TenantsPage() {
   }, [load]);
 
   const remove = async (t: Tenant) => {
-    if (!confirm(`确认删除租户「${t.name}」？其下的实例与数据将一并删除。`)) return;
+    const ok = await confirmDialog({
+      title: "删除租户",
+      message: <>确认删除租户 <b className="text-amber-300">「{t.name}」</b>？<br />其下的实例、用户与数据将一并删除。</>,
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     await api.deleteTenant(t.id);
     load();
   };

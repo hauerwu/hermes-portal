@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Cpu, Loader2, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
+import { useConfirm } from "@/lib/confirm";
 import { api, type ModelConfig } from "@/lib/api";
 
 const providerLabel: Record<string, string> = {
@@ -14,6 +15,7 @@ const providerLabel: Record<string, string> = {
 };
 
 export default function ModelConfigsPage() {
+  const confirmDialog = useConfirm();
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -36,7 +38,13 @@ export default function ModelConfigsPage() {
   }, [load]);
 
   const remove = async (m: ModelConfig) => {
-    if (!confirm(`确认删除模型「${m.name}」？`)) return;
+    const ok = await confirmDialog({
+      title: "删除模型",
+      message: <>确认删除模型 <b className="text-amber-300">「{m.name}」</b>？已关联的实例不受影响。</>,
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     await api.deleteModel(m.id);
     load();
   };

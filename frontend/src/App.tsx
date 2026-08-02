@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { ConfirmProvider } from "@/lib/confirm";
 import LoginPage from "@/pages/LoginPage";
 import SSOCallbackPage from "@/pages/SSOCallbackPage";
 import InstancesPage from "@/pages/InstancesPage";
@@ -151,12 +152,14 @@ function Shell() {
 
 export default function App() {
   return (
-    <AuthProvider>
+    <ConfirmProvider>
+      <AuthProvider>
       <Routes>
         <Route path="/auth/login" element={<LoginPage />} />
         <Route path="/auth/sso" element={<SSOCallbackPage />} />
         <Route path="/*" element={<Shell />} />
       </Routes>
-    </AuthProvider>
+      </AuthProvider>
+    </ConfirmProvider>
   );
 }

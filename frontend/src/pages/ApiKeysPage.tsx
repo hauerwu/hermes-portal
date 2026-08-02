@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Copy, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
+import { useConfirm } from "@/lib/confirm";
 import { api, type ApiKey, type Instance } from "@/lib/api";
 
 export default function ApiKeysPage() {
+  const confirmDialog = useConfirm();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,7 +29,13 @@ export default function ApiKeysPage() {
   }, [load]);
 
   const revoke = async (key: ApiKey) => {
-    if (!confirm(`确认吊销 API Key「${key.name}」？`)) return;
+    const ok = await confirmDialog({
+      title: "吊销 API Key",
+      message: <>确认吊销 <b className="text-amber-300">「{key.name}」</b>？使用该 Key 的调用将立即失败。</>,
+      confirmText: "吊销",
+      danger: true,
+    });
+    if (!ok) return;
     await api.del<{ ok: boolean }>(`/api/apikeys/${key.id}`);
     load();
   };

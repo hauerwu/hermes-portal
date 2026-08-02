@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Modal from "@/components/Modal";
+import { useConfirm } from "@/lib/confirm";
 import { api, type Instance, type ModelConfig } from "@/lib/api";
 
 const statusColor: Record<string, string> = {
@@ -23,6 +24,7 @@ const statusColor: Record<string, string> = {
 };
 
 export default function InstancesPage() {
+  const confirmDialog = useConfirm();
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -68,7 +70,13 @@ export default function InstancesPage() {
   };
 
   const destroy = async (inst: Instance) => {
-    if (!confirm(`确认销毁实例「${inst.name}」？容器与数据卷将被删除。`)) return;
+    const ok = await confirmDialog({
+      title: "销毁实例",
+      message: <>确认销毁实例 <b className="text-amber-300">「{inst.name}」</b>？<br />容器与数据卷将被删除，且不可恢复。</>,
+      confirmText: "销毁",
+      danger: true,
+    });
+    if (!ok) return;
     await api.destroyInstance(inst.id);
     load();
   };

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Trash2, Users as UsersIcon } from "lucide-react";
 import Modal from "@/components/Modal";
+import { useConfirm } from "@/lib/confirm";
 import { api, type User } from "@/lib/api";
 
 const roleLabel: Record<string, string> = {
@@ -10,6 +11,7 @@ const roleLabel: Record<string, string> = {
 };
 
 export default function UsersPage() {
+  const confirmDialog = useConfirm();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -30,7 +32,13 @@ export default function UsersPage() {
   }, [load]);
 
   const remove = async (u: User) => {
-    if (!confirm(`确认删除用户「${u.username}」？`)) return;
+    const ok = await confirmDialog({
+      title: "删除用户",
+      message: <>确认删除用户 <b className="text-amber-300">「{u.username}」</b>？</>,
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     await api.deleteUser(u.id);
     load();
   };
