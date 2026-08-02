@@ -221,6 +221,10 @@ function EditInstanceModal({
   const [openapiUrl, setOpenapiUrl] = useState(instance.openapi_url || "");
   const [memLimit, setMemLimit] = useState(instance.config?.mem_limit || "");
   const [extraEnv, setExtraEnv] = useState<Record<string, string>>(instance.config?.extra_env || {});
+  const [modelUrl, setModelUrl] = useState(instance.config?.default_model?.url || "");
+  const [modelName, setModelName] = useState(instance.config?.default_model?.model || "");
+  const [modelKey, setModelKey] = useState("");
+  const [modelTouched, setModelTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -237,6 +241,13 @@ function EditInstanceModal({
         extra_env: extraEnv,
         mem_limit: memLimit,
       };
+      if (modelTouched) {
+        if (modelUrl.trim() && modelName.trim()) {
+          body.default_model = { url: modelUrl.trim(), model: modelName.trim(), key: modelKey.trim() || undefined };
+        } else {
+          body.default_model = { url: "", model: "" }; // 清空
+        }
+      }
       if (instance.mode === "docker") body.image = image;
       else {
         body.remote_url = remoteUrl;
@@ -302,6 +313,44 @@ function EditInstanceModal({
                   className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
               </div>
             </>
+          )}
+
+          {instance.mode === "docker" && (
+            <div className="rounded-md border border-zinc-800 bg-zinc-950/40 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-zinc-400">默认模型参数</span>
+                {!modelTouched && (
+                  <button type="button" onClick={() => setModelTouched(true)}
+                    className="text-[11px] text-amber-300 hover:text-amber-200">修改</button>
+                )}
+              </div>
+              {modelTouched ? (
+                <div className="space-y-2">
+                  <input value={modelUrl} onChange={(e) => setModelUrl(e.target.value)}
+                    placeholder="端点 URL，如 https://api.example.com/v1"
+                    className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm outline-none focus:border-amber-500" />
+                  <input value={modelName} onChange={(e) => setModelName(e.target.value)}
+                    placeholder="模型名，如 gpt-4o"
+                    className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm outline-none focus:border-amber-500" />
+                  <input value={modelKey} onChange={(e) => setModelKey(e.target.value)}
+                    placeholder="API Key（留空则沿用原 Key）"
+                    className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm outline-none focus:border-amber-500" />
+                </div>
+              ) : (
+                <div className="text-xs text-zinc-500">
+                  {instance.config?.default_model ? (
+                    <>
+                      <div className="truncate">{instance.config.default_model.model} ← {instance.config.default_model.url}</div>
+                      {instance.config.default_model.provider && (
+                        <div className="text-[11px] text-zinc-600">provider: {instance.config.default_model.provider}</div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-zinc-600">未配置（实例将使用其默认模型）</span>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           <div>

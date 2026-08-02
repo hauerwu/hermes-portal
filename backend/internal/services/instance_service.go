@@ -1,9 +1,12 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"regexp"
@@ -89,7 +92,7 @@ func VolumeName(instanceID uint) string {
 }
 
 // Create creates a new instance row and (for docker mode) its container.
-func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode, slug, image, remoteURL, openAPIURL string, extraEnv map[string]string, createdBy *uint) (*models.Instance, error) {
+func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode, slug, image, remoteURL, openAPIURL string, defaultModel *models.DefaultModel, extraEnv map[string]string, createdBy *uint) (*models.Instance, error) {
 	slug = Slugify(name, slug)
 	var count int64
 	s.db.Model(&models.Instance{}).Where("slug = ?", slug).Count(&count)
@@ -117,6 +120,7 @@ func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode,
 		return nil, err
 	}
 	cfg.ExtraEnv = extraEnv
+	cfg.DefaultModel = defaultModel
 
 	inst := &models.Instance{
 		TenantID:   tenantID,
@@ -145,8 +149,9 @@ func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode,
 		inst.ContainerName = ContainerName(inst.ID)
 		s.db.Model(inst).Updates(map[string]any{"status": models.StatusStarting, "container_name": inst.ContainerName})
 		// Asynchronously probe readiness so the status transitions
-		// starting → running without requiring a page refresh.
-		go s.waitReady(context.Background(), inst)
+		// starting → running without requiring a page refresh, then
+		// assign the configured default model via hermes' own API.
+		go s.waitReady(context.Background(), inst, cfg)
 	} else {
 		inst.Status = models.StatusRunning
 		s.db.Model(inst).Update("status", models.StatusRunning)
@@ -155,9 +160,10 @@ func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode,
 }
 
 // waitReady polls the instance dashboard until it becomes healthy, then
-// lets Health() persist the running status. Gives up silently after a
-// timeout — the page-level polling keeps trying afterwards.
-func (s *InstanceService) waitReady(ctx context.Context, inst *models.Instance) {
+// lets Health() persist the running status and assigns the configured
+// default model. Gives up silently after a timeout — the page-level
+// polling keeps trying afterwards (model assignment retried on edit).
+func (s *InstanceService) waitReady(ctx context.Context, inst *models.Instance, cfg models.InstanceConfig) {
 	deadline := time.Now().Add(180 * time.Second)
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
@@ -183,7 +189,14 @@ func (s *InstanceService) waitReady(ctx context.Context, inst *models.Instance) 
 		}
 		result := s.Health(ctx, &fresh)
 		if ok, _ := result["ok"].(bool); ok {
-			return // Health() already persisted status=running
+			// Health() already persisted status=running — now wire the
+			// default model through hermes' native API.
+			if err := s.configureDefaultModel(ctx, &fresh, cfg); err != nil {
+				log.Printf("[portal] instance %d default-model assignment failed: %v",
+					inst.ID, err)
+			} else {
+				return
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -191,6 +204,52 @@ func (s *InstanceService) waitReady(ctx context.Context, inst *models.Instance) 
 		case <-ticker.C:
 		}
 	}
+}
+
+// configureDefaultModel assigns the instance's default model by calling
+// hermes' own POST /api/model/set (writes model.provider / model.default /
+// model.base_url / model.api_key into the instance config.yaml). It uses
+// the portal-held dashboard session, so no hermes code changes are needed.
+func (s *InstanceService) configureDefaultModel(ctx context.Context, inst *models.Instance, cfg models.InstanceConfig) error {
+	dm := cfg.DefaultModel
+	if dm == nil || strings.TrimSpace(dm.Model) == "" || strings.TrimSpace(dm.URL) == "" {
+		return nil // nothing to configure
+	}
+	provider := strings.TrimSpace(dm.Provider)
+	if provider == "" {
+		provider = "custom"
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"scope":                   "main",
+		"provider":                provider,
+		"model":                   strings.TrimSpace(dm.Model),
+		"base_url":                strings.TrimSpace(dm.URL),
+		"api_key":                 strings.TrimSpace(dm.Key),
+		"confirm_expensive_model": true,
+	})
+	base := InstanceDashboardURL(s.cache, inst)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/model/set", bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-Prefix", Prefix(inst.ID))
+	if cookie := s.cache.CookieHeader(ctx, inst); cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("model/set returned %d: %s", resp.StatusCode, truncateString(string(body), 512))
+	}
+	log.Printf("[portal] instance %d default model configured: provider=%s model=%s",
+		inst.ID, provider, dm.Model)
+	return nil
 }
 
 func (s *InstanceService) startContainer(ctx context.Context, inst *models.Instance, cfg models.InstanceConfig) error {
@@ -297,6 +356,7 @@ func (s *InstanceService) Recreate(ctx context.Context, inst *models.Instance) e
 	inst.Status = models.StatusStarting
 	s.db.Model(inst).Updates(map[string]any{"status": models.StatusStarting, "updated_at": time.Now()})
 	s.cache.Invalidate(inst.ID)
+	go s.waitReady(context.Background(), inst, cfg)
 	return nil
 }
 
@@ -346,4 +406,11 @@ func (s *InstanceService) Health(ctx context.Context, inst *models.Instance) map
 	s.db.Model(inst).Updates(map[string]any{"status": inst.Status, "last_heartbeat": inst.LastHeartbeat})
 	result["status"] = inst.Status
 	return result
+}
+
+func truncateString(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }

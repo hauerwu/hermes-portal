@@ -60,6 +60,16 @@ type User struct {
 	UpdatedAt    time.Time
 }
 
+// DefaultModel is the default inference provider/model assigned to an
+// instance via hermes' own POST /api/model/set (model.provider / model.
+// default / model.base_url / model.api_key in its config.yaml).
+type DefaultModel struct {
+	URL      string `json:"url"`
+	Model    string `json:"model"`
+	Key      string `json:"key,omitempty"`
+	Provider string `json:"provider,omitempty"` // default: custom
+}
+
 // InstanceConfig is the JSON blob stored in Instance.Config.
 type InstanceConfig struct {
 	APIServerKey    string            `json:"api_server_key"`
@@ -69,6 +79,7 @@ type InstanceConfig struct {
 	ExtraEnv        map[string]string `json:"extra_env,omitempty"`
 	MemLimit        string            `json:"mem_limit,omitempty"`
 	VolumeName      string            `json:"volume,omitempty"`
+	DefaultModel    *DefaultModel     `json:"default_model,omitempty"`
 }
 
 // Instance is a hermes-agent deployment — either a local container

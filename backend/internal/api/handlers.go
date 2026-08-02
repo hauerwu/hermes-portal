@@ -357,15 +357,16 @@ func resolveTenant(tenantID *uint, actor *models.User) (uint, bool) {
 // ── instances ──────────────────────────────────────────────────────────
 
 type instanceBody struct {
-	Name       string            `json:"name"`
-	Mode       string            `json:"mode"`
-	Slug       string            `json:"slug"`
-	Image      string            `json:"image"`
-	RemoteURL  string            `json:"remote_url"`
-	OpenAPIURL string            `json:"openapi_url"`
-	ExtraEnv   map[string]string `json:"extra_env"`
-	MemLimit   string            `json:"mem_limit"`
-	TenantID   *uint             `json:"tenant_id"` // super admin only
+	Name         string               `json:"name"`
+	Mode         string               `json:"mode"`
+	Slug         string               `json:"slug"`
+	Image        string               `json:"image"`
+	RemoteURL    string               `json:"remote_url"`
+	OpenAPIURL   string               `json:"openapi_url"`
+	ExtraEnv     map[string]string    `json:"extra_env"`
+	MemLimit     string               `json:"mem_limit"`
+	DefaultModel *models.DefaultModel `json:"default_model"`
+	TenantID     *uint                `json:"tenant_id"` // super admin only
 }
 
 func (a *API) ListInstances(c *gin.Context) {
@@ -408,7 +409,7 @@ func (a *API) CreateInstance(c *gin.Context) {
 		mode = models.ModeDocker
 	}
 	inst, err := a.svc.Create(c.Request.Context(), tenantID, body.Name, mode, body.Slug,
-		body.Image, body.RemoteURL, body.OpenAPIURL, body.ExtraEnv, &actor.ID)
+		body.Image, body.RemoteURL, body.OpenAPIURL, body.DefaultModel, body.ExtraEnv, &actor.ID)
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(err.Error(), "docker is not reachable") {
@@ -427,13 +428,14 @@ func (a *API) GetInstance(c *gin.Context) {
 }
 
 type instanceUpdateBody struct {
-	Name       *string           `json:"name"`
-	Slug       *string           `json:"slug"`
-	Image      *string           `json:"image"`
-	RemoteURL  *string           `json:"remote_url"`
-	OpenAPIURL *string           `json:"openapi_url"`
-	ExtraEnv   map[string]string `json:"extra_env"`
-	MemLimit   *string           `json:"mem_limit"`
+	Name         *string              `json:"name"`
+	Slug         *string              `json:"slug"`
+	Image        *string              `json:"image"`
+	RemoteURL    *string              `json:"remote_url"`
+	OpenAPIURL   *string              `json:"openapi_url"`
+	ExtraEnv     map[string]string    `json:"extra_env"`
+	MemLimit     *string              `json:"mem_limit"`
+	DefaultModel *models.DefaultModel `json:"default_model"`
 }
 
 func (a *API) UpdateInstance(c *gin.Context) {
@@ -483,6 +485,17 @@ func (a *API) UpdateInstance(c *gin.Context) {
 		var cfg models.InstanceConfig
 		_ = security.UnmarshalJSON(instance.Config, &cfg)
 		cfg.MemLimit = *body.MemLimit
+		instance.Config = security.MarshalJSON(cfg)
+		changed = true
+	}
+	if body.DefaultModel != nil {
+		var cfg models.InstanceConfig
+		_ = security.UnmarshalJSON(instance.Config, &cfg)
+		if body.DefaultModel.URL == "" && body.DefaultModel.Model == "" {
+			cfg.DefaultModel = nil // explicit clear
+		} else {
+			cfg.DefaultModel = body.DefaultModel
+		}
 		instance.Config = security.MarshalJSON(cfg)
 		changed = true
 	}
@@ -755,8 +768,17 @@ func publicTenant(t *models.Tenant) gin.H {
 func publicInstance(i *models.Instance) gin.H {
 	var cfg models.InstanceConfig
 	_ = security.UnmarshalJSON(i.Config, &cfg)
-	// Never leak secrets.
+	// Never leak secrets (api key / dashboard credentials are hidden).
 	safe := gin.H{"extra_env": cfg.ExtraEnv, "mem_limit": cfg.MemLimit}
+	if cfg.DefaultModel != nil {
+		safe["default_model"] = gin.H{
+			"url":      cfg.DefaultModel.URL,
+			"model":    cfg.DefaultModel.Model,
+			"provider": cfg.DefaultModel.Provider,
+		}
+	} else {
+		safe["default_model"] = nil
+	}
 	return gin.H{
 		"id":             i.ID,
 		"tenant_id":      i.TenantID,

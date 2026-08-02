@@ -184,6 +184,9 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [image, setImage] = useState("nousresearch/hermes-agent");
   const [remoteUrl, setRemoteUrl] = useState("");
   const [openapiUrl, setOpenapiUrl] = useState("");
+  const [modelUrl, setModelUrl] = useState("");
+  const [modelName, setModelName] = useState("");
+  const [modelKey, setModelKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -195,6 +198,13 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
       const body: Record<string, unknown> = { name, mode, slug };
       if (mode === "docker") {
         body.image = image;
+        if (modelUrl.trim() && modelName.trim()) {
+          body.default_model = {
+            url: modelUrl.trim(),
+            model: modelName.trim(),
+            key: modelKey.trim() || undefined,
+          };
+        }
       } else {
         body.remote_url = remoteUrl;
         if (openapiUrl) body.openapi_url = openapiUrl;
@@ -241,11 +251,38 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
           </div>
           {mode === "docker" ? (
-            <div>
-              <label className="mb-1 block text-xs text-zinc-400">镜像</label>
-              <input value={image} onChange={(e) => setImage(e.target.value)}
-                className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
-            </div>
+            <>
+              <div>
+                <label className="mb-1 block text-xs text-zinc-400">镜像</label>
+                <input value={image} onChange={(e) => setImage(e.target.value)}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
+              </div>
+              <details className="rounded-md border border-zinc-800 bg-zinc-950/40 p-3">
+                <summary className="cursor-pointer text-xs font-medium text-zinc-400 hover:text-amber-300">
+                  默认模型参数（可选）：OpenAI 兼容端点 URL / 模型名 / API Key
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-zinc-500">端点 URL</label>
+                    <input value={modelUrl} onChange={(e) => setModelUrl(e.target.value)}
+                      placeholder="https://api.example.com/v1"
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-zinc-500">模型名</label>
+                    <input value={modelName} onChange={(e) => setModelName(e.target.value)}
+                      placeholder="gpt-4o / deepseek-chat / qwen-max …"
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-zinc-500">API Key</label>
+                    <input type="password" value={modelKey} onChange={(e) => setModelKey(e.target.value)}
+                      placeholder="sk-…"
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
+                  </div>
+                </div>
+              </details>
+            </>
           ) : (
             <>
               <div>

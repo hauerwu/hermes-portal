@@ -29,7 +29,11 @@ export interface Instance {
   status: string;
   remote_url: string;
   openapi_url: string;
-  config: { extra_env?: Record<string, string>; mem_limit?: string };
+  config: {
+    extra_env?: Record<string, string>;
+    mem_limit?: string;
+    default_model?: { url: string; model: string; provider?: string } | null;
+  };
   last_heartbeat: string | null;
   created_at: string;
   updated_at: string;
