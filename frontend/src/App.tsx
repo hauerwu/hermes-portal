@@ -70,32 +70,47 @@ function Shell() {
         } flex shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/60 transition-[width] duration-200 ease-in-out`}
       >
         {/* ── 顶栏：Logo + 收放按钮 ── */}
-        <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-3.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <LayoutDashboard className="h-5 w-5 shrink-0 text-amber-400" />
-            {!collapsed && (
-              <div className="min-w-0">
-                <div className="truncate font-semibold leading-tight">Hermes Portal</div>
-                <div className="truncate text-[11px] text-zinc-500">{user.username}</div>
-              </div>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              onClick={() => setTheme(toggleTheme())}
-              className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-              title={theme === "dark" ? "切换为浅色风格" : "切换为深色风格"}
-            >
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
+        <div
+          className={`flex items-center border-b border-zinc-800 py-3.5 ${
+            collapsed ? "justify-center px-0" : "justify-between px-3"
+          }`}
+        >
+          {collapsed ? (
+            // 收起态侧栏仅 56px 宽：只保留展开按钮并居中，避免按钮溢出面板
             <button
               onClick={toggleSidebar}
               className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-              title={collapsed ? "展开菜单" : "收起菜单"}
+              title="展开菜单"
             >
-              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              <PanelLeftOpen className="h-4 w-4" />
             </button>
-          </div>
+          ) : (
+            <>
+              <div className="flex min-w-0 items-center gap-2">
+                <LayoutDashboard className="h-5 w-5 shrink-0 text-amber-400" />
+                <div className="min-w-0">
+                  <div className="truncate font-semibold leading-tight">Hermes Portal</div>
+                  <div className="truncate text-[11px] text-zinc-500">{user.username}</div>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  onClick={() => setTheme(toggleTheme())}
+                  className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                  title={theme === "dark" ? "切换为浅色风格" : "切换为深色风格"}
+                >
+                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </button>
+                <button
+                  onClick={toggleSidebar}
+                  className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                  title="收起菜单"
+                >
+                  <PanelLeftClose className="h-4 w-4" />
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── 导航菜单 ── */}
