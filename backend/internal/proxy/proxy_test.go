@@ -51,3 +51,25 @@ func TestWebhookTarget(t *testing.T) {
 		}
 	}
 }
+
+// TestStripGatewayPrefix verifies the /openapi passthrough keeps the
+// instance's native paths: cron REST (/api/jobs), sessions, runs and the
+// OpenAI surface (/v1/...).
+func TestStripGatewayPrefix(t *testing.T) {
+	cases := []struct {
+		path, slug, marker, want string
+	}{
+		{"/api/v1/gateway/test1/openapi/v1/models", "test1", "/openapi", "/v1/models"},
+		{"/api/v1/gateway/test1/openapi/v1/chat/completions", "test1", "/openapi", "/v1/chat/completions"},
+		{"/api/v1/gateway/test1/openapi/api/jobs", "test1", "/openapi", "/api/jobs"},
+		{"/api/v1/gateway/test1/openapi/api/jobs/42/pause", "test1", "/openapi", "/api/jobs/42/pause"},
+		{"/api/v1/gateway/test1/openapi/api/sessions", "test1", "/openapi", "/api/sessions"},
+		{"/api/v1/gateway/test1/openapi/v1/runs/abc/stop", "test1", "/openapi", "/v1/runs/abc/stop"},
+	}
+	for _, c := range cases {
+		got := stripGatewayPrefix(c.path, c.slug, c.marker)
+		if got != c.want {
+			t.Errorf("stripGatewayPrefix(%q) = %q want %q", c.path, got, c.want)
+		}
+	}
+}

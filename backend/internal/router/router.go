@@ -79,10 +79,11 @@ func New(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	}
 	gateway := r.Group("/api/v1/gateway", gatewayResolver)
 	{
-		gateway.GET("/:slug/openapi/v1/*path", gatewayProxy.OpenAPIHandler())
-		gateway.POST("/:slug/openapi/v1/*path", gatewayProxy.OpenAPIHandler())
-		gateway.DELETE("/:slug/openapi/v1/*path", gatewayProxy.OpenAPIHandler())
-		gateway.PUT("/:slug/openapi/v1/*path", gatewayProxy.OpenAPIHandler())
+		// OpenAI surface + every other instance api_server endpoint
+		// (/api/jobs cron REST, /api/sessions, /v1/runs, …). The prefix
+		// /openapi is stripped by OpenAPIHandler, keeping the instance's
+		// native paths intact (e.g. /openapi/api/jobs → /api/jobs).
+		gateway.Any("/:slug/openapi/*path", gatewayProxy.OpenAPIHandler())
 		gateway.GET("/:slug/webhook/:channel/*path", gatewayProxy.WebhookHandler())
 		gateway.POST("/:slug/webhook/:channel/*path", gatewayProxy.WebhookHandler())
 		gateway.PUT("/:slug/webhook/:channel/*path", gatewayProxy.WebhookHandler())

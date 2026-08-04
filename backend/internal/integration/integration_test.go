@@ -66,6 +66,21 @@ func newTestServer(t *testing.T) (*gin.Engine, *config.Config, *models.User, *mo
 		t.Fatal(err)
 	}
 
+	// A remote instance in the default tenant (tenant 1).
+	var t1 models.Tenant
+	if err := db.Where("slug = ?", "default").First(&t1).Error; err != nil {
+		t.Fatal(err)
+	}
+	instOne := models.Instance{
+		TenantID: t1.ID, Name: "Inst One", Slug: "inst-one",
+		Mode: models.ModeRemote, Status: models.StatusRunning,
+		Config: "{}", RemoteURL: "http://one.example:9119",
+		OpenAPIURL: "http://one.example:8642/v1",
+	}
+	if err := db.Create(&instOne).Error; err != nil {
+		t.Fatal(err)
+	}
+
 	engine := router.New(cfg, db)
 
 	var rootUser, tenantUser models.User
@@ -178,10 +193,69 @@ func TestGatewayAPIKeyAuth(t *testing.T) {
 		t.Fatalf("valid key rejected: %d", rec.Code)
 	}
 
-	// Super admin can also create keys (uses first tenant).
+	// Instance-scoped key must NOT access another tenant's instance (inst-one
+	// belongs to tenant 1, the key is scoped to tenant 2's inst-two).
+	instOneReq := httptest.NewRequest("GET", "/api/v1/gateway/inst-one/openapi/v1/models", nil)
+	instOneReq.Header.Set("X-API-Key", created.Key)
+	recOne := httptest.NewRecorder()
+	engine.ServeHTTP(recOne, instOneReq)
+	if recOne.Code != http.StatusUnauthorized && recOne.Code != http.StatusForbidden {
+		t.Fatalf("instance-scoped key must be rejected on another tenant's instance: %d", recOne.Code)
+	}
+
+	// Super admin creates a global key (tenant_id = null) that may access
+	// any tenant's instance.
 	w = doReq(t, engine, "POST", "/api/apikeys", rootTok, map[string]string{"name": "root-key"})
 	if w.Code != 200 && w.Code != 201 {
 		t.Fatalf("root key: %d", w.Code)
+	}
+	var rootKey struct {
+		Key      string `json:"key"`
+		TenantID *uint  `json:"tenant_id"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &rootKey)
+	if rootKey.TenantID != nil {
+		t.Fatalf("global key must have tenant_id = null, got %v", *rootKey.TenantID)
+	}
+	req2 := httptest.NewRequest("GET", "/api/v1/gateway/inst-two/openapi/v1/models", nil)
+	req2.Header.Set("X-API-Key", rootKey.Key)
+	rec2 := httptest.NewRecorder()
+	engine.ServeHTTP(rec2, req2)
+	if rec2.Code == http.StatusUnauthorized || rec2.Code == http.StatusForbidden {
+		t.Fatalf("global key rejected on other tenant's instance: %d", rec2.Code)
+	}
+
+	// ── Global super-admin key also authenticates the management API ──
+	// /api/tenants is super-admin-only and requires portal auth.
+	me := httptest.NewRequest("GET", "/api/auth/me", nil)
+	me.Header.Set("Authorization", "Bearer "+rootKey.Key)
+	meRec := httptest.NewRecorder()
+	engine.ServeHTTP(meRec, me)
+	if meRec.Code != http.StatusOK {
+		t.Fatalf("global key /api/auth/me: %d", meRec.Code)
+	}
+	var meBody struct {
+		Role string `json:"role"`
+	}
+	json.Unmarshal(meRec.Body.Bytes(), &meBody)
+	if meBody.Role != "super_admin" {
+		t.Fatalf("global key actor role: %q", meBody.Role)
+	}
+	reqTenants := httptest.NewRequest("GET", "/api/tenants", nil)
+	reqTenants.Header.Set("X-API-Key", rootKey.Key)
+	recTenants := httptest.NewRecorder()
+	engine.ServeHTTP(recTenants, reqTenants)
+	if recTenants.Code != http.StatusOK {
+		t.Fatalf("global key management API /api/tenants: %d %s", recTenants.Code, recTenants.Body.String())
+	}
+
+	// Instance-scoped key must NOT access the management API.
+	keyMgmt := httptest.NewRequest("GET", "/api/tenants", nil)
+	keyMgmt.Header.Set("Authorization", "Bearer "+created.Key)
+	keyMgmtRec := httptest.NewRecorder()
+	engine.ServeHTTP(keyMgmtRec, keyMgmt)
+	if keyMgmtRec.Code != http.StatusForbidden && keyMgmtRec.Code != http.StatusUnauthorized {
+		t.Fatalf("instance-scoped key must be rejected on management API: %d", keyMgmtRec.Code)
 	}
 }
 

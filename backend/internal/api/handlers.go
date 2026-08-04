@@ -659,23 +659,39 @@ func (a *API) CreateAPIKey(c *gin.Context) {
 		return
 	}
 	actor := middleware.CurrentUser(c)
-	tenantID, ok := resolveTenant(nil, actor)
-	if !ok {
-		var first models.Tenant
-		if err := a.db.Order("id").First(&first).Error; err == nil {
-			tenantID = first.ID
-		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no tenant exists"})
-			return
-		}
-	}
-	// Validate instance scope (if given) belongs to the tenant.
+
+	// Two tiers:
+	//   1) super admin + no instance → global key (TenantID nil): any instance
+	//   2) instance-scoped key → TenantID mirrors the instance's tenant
+	//   (legacy) tenant-wide key → tenant from actor / first tenant
+	var tenantID *uint
 	if body.InstanceID != nil {
 		var inst models.Instance
-		if err := a.db.First(&inst, *body.InstanceID).Error; err != nil || inst.TenantID != tenantID {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "instance not found in tenant"})
+		if err := a.db.First(&inst, *body.InstanceID).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "instance not found"})
 			return
 		}
+		if actor.Role != models.RoleSuperAdmin &&
+			(actor.TenantID == nil || *actor.TenantID != inst.TenantID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "instance belongs to another tenant"})
+			return
+		}
+		tid := inst.TenantID
+		tenantID = &tid
+	} else if actor.Role == models.RoleSuperAdmin {
+		tenantID = nil // global super-admin key, any instance
+	} else {
+		tid, ok := resolveTenant(nil, actor)
+		if !ok {
+			var first models.Tenant
+			if err := a.db.Order("id").First(&first).Error; err == nil {
+				tid = first.ID
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "no tenant exists"})
+				return
+			}
+		}
+		tenantID = &tid
 	}
 	plain, err := security.GenerateAPIKey()
 	if err != nil {
@@ -697,7 +713,7 @@ func (a *API) CreateAPIKey(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	database.Audit(a.db, &actor.ID, &tenantID, "apikey_create", key.Name, "", middleware.ClientIP(c))
+	database.Audit(a.db, &actor.ID, tenantID, "apikey_create", key.Name, "", middleware.ClientIP(c))
 	// Return the plaintext once — it is never stored.
 	c.JSON(http.StatusCreated, gin.H{
 		"key":         plain,
@@ -718,12 +734,13 @@ func (a *API) RevokeAPIKey(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "key not found"})
 		return
 	}
-	if actor.Role != models.RoleSuperAdmin && key.TenantID != *actor.TenantID {
+	if actor.Role != models.RoleSuperAdmin &&
+		(key.TenantID == nil || actor.TenantID == nil || *key.TenantID != *actor.TenantID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "key belongs to another tenant"})
 		return
 	}
 	a.db.Model(&key).Update("active", false)
-	database.Audit(a.db, &actor.ID, &key.TenantID, "apikey_revoke", key.Name, "", middleware.ClientIP(c))
+	database.Audit(a.db, &actor.ID, key.TenantID, "apikey_revoke", key.Name, "", middleware.ClientIP(c))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

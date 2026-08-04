@@ -308,6 +308,9 @@ func (g *GatewayProxy) baseProxy(target *url.URL, director func(*http.Request)) 
 }
 
 // authorizeKey validates the caller's portal API key against the instance.
+// A global super-admin key (TenantID == nil) may access any instance;
+// otherwise the key's tenant must match the instance's tenant and, when
+// the key is instance-scoped, it must target this exact instance.
 func (g *GatewayProxy) authorizeKey(c *gin.Context, plain string, instance *models.Instance) error {
 	var key models.ApiKey
 	if err := g.db.Where("key_hash = ?", security.HashAPIKey(plain)).First(&key).Error; err != nil {
@@ -320,11 +323,14 @@ func (g *GatewayProxy) authorizeKey(c *gin.Context, plain string, instance *mode
 	if key.ExpiresAt != nil && key.ExpiresAt.Before(nowVal) {
 		return fmt.Errorf("API key expired")
 	}
-	if key.TenantID != instance.TenantID {
-		return fmt.Errorf("API key does not grant access to this instance")
-	}
-	if key.InstanceID != nil && *key.InstanceID != instance.ID {
-		return fmt.Errorf("API key is scoped to another instance")
+	// Global super-admin key: grants access to any instance.
+	if key.TenantID != nil {
+		if *key.TenantID != instance.TenantID {
+			return fmt.Errorf("API key does not grant access to this instance")
+		}
+		if key.InstanceID != nil && *key.InstanceID != instance.ID {
+			return fmt.Errorf("API key is scoped to another instance")
+		}
 	}
 	g.db.Model(&models.ApiKey{}).Where("id = ?", key.ID).Update("last_used", &nowVal)
 	return nil

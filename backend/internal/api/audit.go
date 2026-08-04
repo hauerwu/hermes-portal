@@ -68,14 +68,15 @@ func (a *API) ListAuditLogs(c *gin.Context) {
 		return
 	}
 
-	// Resolve actor usernames in one query.
+	// Resolve actor usernames in one query. actor_id 0 is the synthetic
+	// super-admin API-key actor (middleware.authenticateAPIKey).
+	usernames := map[uint]string{0: "apikey"}
 	actorIDs := make([]uint, 0, len(rows))
 	for i := range rows {
 		if rows[i].ActorID != nil {
 			actorIDs = append(actorIDs, *rows[i].ActorID)
 		}
 	}
-	usernames := map[uint]string{}
 	if len(actorIDs) > 0 {
 		var users []models.User
 		a.db.Where("id IN ?", actorIDs).Find(&users)
@@ -87,11 +88,15 @@ func (a *API) ListAuditLogs(c *gin.Context) {
 	items := make([]gin.H, 0, len(rows))
 	for i := range rows {
 		r := &rows[i]
+		actorName := ""
+		if r.ActorID != nil {
+			actorName = usernames[*r.ActorID] // 0 → "apikey" (synthetic super-admin key actor)
+		}
 		items = append(items, gin.H{
 			"id":         r.ID,
 			"tenant_id":  r.TenantID,
 			"actor_id":   r.ActorID,
-			"actor":      usernames[uintPtrOrZero(r.ActorID)],
+			"actor":      actorName,
 			"action":     r.Action,
 			"target":     r.Target,
 			"detail":     r.Detail,

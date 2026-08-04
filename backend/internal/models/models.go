@@ -126,10 +126,18 @@ type Instance struct {
 // ApiKey is a portal-issued credential for the unified OpenAI gateway.
 // Only the SHA-256 hash is stored; the plaintext prefix is kept for UI
 // display and lookup efficiency.
+//
+// Two tiers:
+//   - Global super-admin key: TenantID == nil && InstanceID == nil —
+//     may access any instance (any tenant).
+//   - Instance-scoped key: InstanceID != nil — may access only that
+//     instance; TenantID mirrors the instance's tenant.
+//   - (legacy) tenant-wide key: TenantID != nil && InstanceID == nil —
+//     all instances of the tenant.
 type ApiKey struct {
-	ID         uint   `gorm:"primaryKey"`
-	TenantID   uint   `gorm:"index;not null"`
-	InstanceID *uint  `gorm:"index"` // NULL = tenant-wide
+	ID         uint  `gorm:"primaryKey"`
+	TenantID   *uint `gorm:"index"` // NULL = global super-admin key
+	InstanceID *uint `gorm:"index"` // NULL = tenant-wide (or global)
 	Name       string `gorm:"size:128;not null"`
 	KeyPrefix  string `gorm:"size:16;not null"`
 	KeyHash    string `gorm:"size:64;uniqueIndex;not null"`

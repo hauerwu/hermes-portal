@@ -42,7 +42,7 @@ export interface Instance {
 
 export interface ApiKey {
   id: number;
-  tenant_id: number;
+  tenant_id: number | null; // null = global super-admin key (any instance)
   instance_id: number | null;
   name: string;
   key_prefix: string;

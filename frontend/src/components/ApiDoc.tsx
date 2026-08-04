@@ -100,6 +100,29 @@ export default function ApiDoc() {
                   <td className="px-3 py-2 font-mono text-sky-300">/v1/capabilities · /v1/skills · /v1/toolsets</td>
                   <td className="px-3 py-2 text-zinc-400">Agent 能力/技能/工具集探测</td>
                 </tr>
+                <tr className="bg-zinc-950/30">
+                  <td colSpan={3} className="px-3 py-1.5 font-medium text-zinc-400">定时任务（cron REST）</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2 font-mono text-emerald-300">POST</td>
+                  <td className="px-3 py-2 font-mono text-sky-300">/api/jobs</td>
+                  <td className="px-3 py-2 text-zinc-400">创建定时任务</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2 font-mono text-emerald-300">GET</td>
+                  <td className="px-3 py-2 font-mono text-sky-300">/api/jobs</td>
+                  <td className="px-3 py-2 text-zinc-400">任务列表</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2 font-mono text-emerald-300">PATCH · DELETE</td>
+                  <td className="px-3 py-2 font-mono text-sky-300">/api/jobs/{`{job_id}`}</td>
+                  <td className="px-3 py-2 text-zinc-400">更新 / 删除任务</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2 font-mono text-emerald-300">POST</td>
+                  <td className="px-3 py-2 font-mono text-sky-300">/api/jobs/{`{job_id}`}/pause · /resume · /run</td>
+                  <td className="px-3 py-2 text-zinc-400">暂停 / 恢复 / 立即执行</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -128,9 +151,34 @@ export default function ApiDoc() {
           </div>
         </section>
 
+        <CodeBlock
+          title="⑤ 创建定时任务（cron job）"
+          code={`curl -X POST ${base}/api/jobs \\
+  -H "X-API-Key: hp_你的Key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "name": "每日早报",
+    "schedule": "0 9 * * *",
+    "prompt": "生成一份今日新闻早报并发送给我",
+    "deliver": "local"
+  }'`}
+        />
+
         <p className="text-xs text-zinc-600">
           提示：`{`model`}` 字段填写实例已配置的模型名（可在「实例编辑 → 默认模型参数」查看）；未配置模型时可用 hermes 默认模型名。
         </p>
+
+        <section className="rounded-lg border border-amber-800/50 bg-amber-500/5 p-3">
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-400">超管 Key 额外能力</h3>
+          <p className="text-xs leading-relaxed text-zinc-400">
+            <b className="text-amber-300">超管 Key</b>（作用域选「超管 Key — 任意实例」）除网关外，还可直接调用 portal 管理 API，等价于超级管理员：
+            <code className="rounded bg-zinc-950 px-1.5 py-0.5 text-[11px] text-sky-300">Authorization: Bearer hp_…</code>
+            即可访问 <code className="rounded bg-zinc-950 px-1.5 py-0.5 text-[11px] text-sky-300">/api/instances</code>、
+            <code className="rounded bg-zinc-950 px-1.5 py-0.5 text-[11px] text-sky-300">/api/users</code>、
+            <code className="rounded bg-zinc-950 px-1.5 py-0.5 text-[11px] text-sky-300">/api/tenants</code> 等全部管理接口。
+            实例绑定 Key 仅能调用所绑定实例的网关，不能访问管理 API。
+          </p>
+        </section>
       </div>
     </details>
   );

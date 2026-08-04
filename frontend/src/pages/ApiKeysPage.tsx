@@ -3,10 +3,13 @@ import { Copy, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import ApiDoc from "@/components/ApiDoc";
 import Modal from "@/components/Modal";
 import { useConfirm } from "@/lib/confirm";
+import { useAuth } from "@/lib/auth";
 import { api, type ApiKey, type Instance } from "@/lib/api";
 
 export default function ApiKeysPage() {
   const confirmDialog = useConfirm();
+  const { user } = useAuth();
+  const isSuper = user?.role === "super_admin";
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +44,10 @@ export default function ApiKeysPage() {
     load();
   };
 
-  const instanceName = (id: number | null) => instances.find((i) => i.id === id)?.name || "（全租户）";
+  const instanceName = (key: ApiKey) => {
+    if (key.tenant_id === null && key.instance_id === null) return "全局超管（任意实例）";
+    return instances.find((i) => i.id === key.instance_id)?.name || (key.instance_id === null ? "（全租户）" : `#${key.instance_id}`);
+  };
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -88,7 +94,7 @@ export default function ApiKeysPage() {
                 <tr key={key.id} className="bg-zinc-950/40">
                   <td className="px-4 py-2.5">
                     <div className="font-medium">{key.name}</div>
-                    <div className="text-xs text-zinc-500">{instanceName(key.instance_id)}</div>
+                    <div className="text-xs text-zinc-500">{instanceName(key)}</div>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs text-zinc-400">{key.key_prefix}…</td>
                   <td className="px-4 py-2.5 text-xs text-zinc-400">
@@ -120,6 +126,7 @@ export default function ApiKeysPage() {
       {createOpen && (
         <CreateKeyModal
           instances={instances}
+          isSuper={isSuper}
           onClose={() => setCreateOpen(false)}
           onCreated={load}
         />
@@ -130,15 +137,18 @@ export default function ApiKeysPage() {
 
 function CreateKeyModal({
   instances,
+  isSuper,
   onClose,
   onCreated,
 }: {
   instances: Instance[];
+  isSuper: boolean;
   onClose: () => void;
   onCreated: () => void;
 }) {
   const [name, setName] = useState("");
-  const [instanceId, setInstanceId] = useState<number | "">("");
+  // "global" = 超管 Key（任意实例）; "" = 全租户（仅非超管）; number = 绑定实例
+  const [scope, setScope] = useState<string | number>(isSuper ? "global" : "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -150,7 +160,7 @@ function CreateKeyModal({
     try {
       const res = await api.post<{ key: string }>("/api/apikeys", {
         name,
-        instance_id: instanceId === "" ? null : instanceId,
+        instance_id: scope === "global" || scope === "" ? null : Number(scope),
       });
       setNewKey(res.key);
     } catch (err: any) {
@@ -194,17 +204,29 @@ function CreateKeyModal({
                   className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-zinc-400">作用域（留空 = 全租户实例）</label>
+                <label className="mb-1 block text-xs text-zinc-400">作用域</label>
                 <select
-                  value={instanceId}
-                  onChange={(e) => setInstanceId(e.target.value === "" ? "" : Number(e.target.value))}
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value === "" ? "" : e.target.value === "global" ? "global" : Number(e.target.value))}
                   className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500"
                 >
-                  <option value="">全部实例（本租户）</option>
-                  {instances.map((i) => (
-                    <option key={i.id} value={i.id}>{i.name} ({i.slug})</option>
-                  ))}
+                  {isSuper && (
+                    <option value="global">超管 Key — 任意实例（跨租户）</option>
+                  )}
+                  {!isSuper && <option value="">全部实例（本租户）</option>}
+                  <optgroup label="绑定单个实例">
+                    {instances.map((i) => (
+                      <option key={i.id} value={i.id}>{i.name} ({i.slug})</option>
+                    ))}
+                  </optgroup>
                 </select>
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  {scope === "global"
+                    ? "该 Key 可调用任意实例的 OpenAI 网关（无租户/实例限制）。"
+                    : scope === ""
+                      ? "该 Key 只能调用本租户内实例的 OpenAI 网关。"
+                      : "该 Key 只能调用所绑定实例的 OpenAI 网关。"}
+                </p>
               </div>
               {error && <div className="text-sm text-red-400">{error}</div>}
               <div className="flex justify-end gap-2 pt-2">
