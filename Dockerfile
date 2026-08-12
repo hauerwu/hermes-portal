@@ -16,7 +16,7 @@ ENV GOPROXY=https://goproxy.cn,direct
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/portal ./cmd/portal
+RUN CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags="-s -w" -o /out/portal ./cmd/portal
 
 # ── Stage 3: runtime ───────────────────────────────────────────────────
 # Runs as root: the portal is a management control-plane that owns the

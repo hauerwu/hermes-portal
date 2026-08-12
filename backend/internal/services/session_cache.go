@@ -78,6 +78,14 @@ func (c *DashboardSessionCache) CookieHeader(ctx context.Context, instance *mode
 		return cookify(entry.cookies)
 	}
 
+	// Remote instances hold credentials the portal does not know; a portal-
+	// generated basic-auth bootstrap would always fail. Their dashboard
+	// sessions are established through the embedded login form (captured back
+	// into this cache via Capture) instead.
+	if instance.Mode == models.ModeRemote {
+		return ""
+	}
+
 	cookies, err := c.bootstrap(ctx, instance)
 	if err != nil {
 		log.Printf("[portal] session bootstrap failed for instance %d: %v", instance.ID, err)

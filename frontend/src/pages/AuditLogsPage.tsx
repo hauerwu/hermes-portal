@@ -37,16 +37,28 @@ export default function AuditLogsPage() {
   const [action, setAction] = useState("");
   const [target, setTarget] = useState("");
   const [actor, setActor] = useState("");
+  // 输入防抖：避免每敲一个字符都触发一次请求
+  const [appliedTarget, setAppliedTarget] = useState("");
+  const [appliedActor, setAppliedActor] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setAppliedTarget(target.trim());
+      setAppliedActor(actor.trim());
+      setOffset(0);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [target, actor]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params: Record<string, string | number> = { limit: PAGE_SIZE, offset };
       if (action) params.action = action;
-      if (target.trim()) params.target = target.trim();
-      if (actor.trim()) params.actor = actor.trim();
+      if (appliedTarget) params.target = appliedTarget;
+      if (appliedActor) params.actor = appliedActor;
       const res = await api.listAudit(params);
       setItems(res.items);
       setTotal(res.total);
@@ -56,11 +68,17 @@ export default function AuditLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [offset, action, target, actor]);
+  }, [offset, action, appliedTarget, appliedActor]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const flushFilters = () => {
+    setAppliedTarget(target.trim());
+    setAppliedActor(actor.trim());
+    setOffset(0);
+  };
 
   useEffect(() => {
     api.auditActions().then((res) => setActions(res.actions)).catch(() => {});
@@ -103,7 +121,7 @@ export default function AuditLogsPage() {
           <input
             value={target}
             onChange={(e) => setTarget(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && setOffset(0)}
+            onKeyDown={(e) => e.key === "Enter" && flushFilters()}
             placeholder="目标（实例/用户 slug）"
             className="w-56 rounded-md border border-zinc-700 bg-zinc-950 py-1.5 pl-8 pr-3 text-sm outline-none focus:border-amber-500"
           />
@@ -111,13 +129,16 @@ export default function AuditLogsPage() {
         <input
           value={actor}
           onChange={(e) => setActor(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && setOffset(0)}
+          onKeyDown={(e) => e.key === "Enter" && flushFilters()}
           placeholder="操作者用户名"
           className="w-40 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm outline-none focus:border-amber-500"
         />
         {(action || target || actor) && (
           <button
-            onClick={() => { setAction(""); setTarget(""); setActor(""); setOffset(0); }}
+            onClick={() => {
+              setAction(""); setTarget(""); setActor("");
+              setAppliedTarget(""); setAppliedActor(""); setOffset(0);
+            }}
             className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800"
           >
             清除筛选

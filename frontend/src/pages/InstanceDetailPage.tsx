@@ -58,27 +58,46 @@ export default function InstanceDetailPage() {
     try {
       await api.instanceAction(instanceId, action);
       await load();
+    } catch (e: any) {
+      setError(e.message || "操作失败");
     } finally {
       setBusy(false);
     }
   };
 
   const fetchLogs = async () => {
-    const res = await api.instanceLogs(instanceId);
-    setLogs(res.logs);
-    setShowLogs(true);
+    try {
+      const res = await api.instanceLogs(instanceId);
+      setLogs(res.logs);
+      setShowLogs(true);
+    } catch (e: any) {
+      setError(e.message || "读取日志失败");
+    }
   };
 
   const destroy = async () => {
+    const isDocker = inst?.mode === "docker";
     const ok = await confirmDialog({
       title: "销毁实例",
-      message: <>确认销毁实例 <b className="text-amber-300">「{inst?.name}」</b>？<br />容器与数据卷将被删除，且不可恢复。</>,
-      confirmText: "销毁",
+      message: (
+        <>
+          确认销毁实例 <b className="text-amber-300">「{inst?.name}」</b>？
+          <br />
+          {isDocker
+            ? "容器与数据卷将被删除，且不可恢复。"
+            : "该实例将从门户移除纳管（远程实例本身不受影响）。"}
+        </>
+      ),
+      confirmText: isDocker ? "销毁" : "移除",
       danger: true,
     });
     if (!ok) return;
-    await api.destroyInstance(instanceId);
-    window.location.hash = "#/instances";
+    try {
+      await api.destroyInstance(instanceId);
+      window.location.hash = "#/instances";
+    } catch (e: any) {
+      setError(e.message || "销毁失败");
+    }
   };
 
   if (!inst) {
@@ -119,7 +138,7 @@ export default function InstanceDetailPage() {
           className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800 disabled:opacity-40">
           <RefreshCw className="h-3.5 w-3.5" /> 重启
         </button>
-        <button onClick={fetchLogs}
+        <button onClick={fetchLogs} disabled={inst.mode !== "docker"}
           className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800 disabled:opacity-40">
           <Terminal className="h-3.5 w-3.5" /> 容器日志
         </button>
@@ -133,9 +152,9 @@ export default function InstanceDetailPage() {
           className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800">
           <Pencil className="h-3.5 w-3.5" /> 编辑
         </button>
-        <button onClick={destroy} disabled={inst.mode !== "docker"}
-          className="ml-auto flex items-center gap-1.5 rounded-md border border-red-900 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-40">
-          <Trash2 className="h-3.5 w-3.5" /> 销毁实例
+        <button onClick={destroy}
+          className="ml-auto flex items-center gap-1.5 rounded-md border border-red-900 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10">
+          <Trash2 className="h-3.5 w-3.5" /> {inst.mode === "docker" ? "销毁实例" : "移除纳管"}
         </button>
       </div>
 
@@ -257,17 +276,19 @@ function EditInstanceModal({
         extra_env: extraEnv,
         mem_limit: memLimit,
       };
-      if (modelId !== "") {
-        body.model_id = Number(modelId); // 从模型库切换
-      } else if (modelCleared) {
-        body.model_id = null; // 取消关联
-        body.default_model = { url: "", model: "" }; // 清空
-      } else if (modelTouched) {
+      if (modelTouched) {
+        // 手动配置优先：脱离模型库关联，使用手动填写的端点参数
+        body.model_id = null;
         if (modelUrl.trim() && modelName.trim()) {
           body.default_model = { url: modelUrl.trim(), model: modelName.trim(), key: modelKey.trim() || undefined };
         } else {
           body.default_model = { url: "", model: "" }; // 清空
         }
+      } else if (modelId !== "") {
+        body.model_id = Number(modelId); // 从模型库切换
+      } else if (modelCleared) {
+        body.model_id = null; // 取消关联
+        body.default_model = { url: "", model: "" }; // 清空
       }
       if (instance.mode === "docker") body.image = image;
       else {
@@ -347,8 +368,11 @@ function EditInstanceModal({
                 <select
                   value={modelId}
                   onChange={(e) => {
-                    setModelId(e.target.value === "" ? "" : Number(e.target.value));
-                    setModelCleared(e.target.value === "");
+                    const v = e.target.value === "" ? "" : Number(e.target.value);
+                    setModelId(v);
+                    setModelCleared(v === "");
+                    // 选择模型库条目后，退出“手动修改”模式，避免手动输入被覆盖
+                    if (v !== "") setModelTouched(false);
                   }}
                   className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm outline-none focus:border-amber-500"
                 >

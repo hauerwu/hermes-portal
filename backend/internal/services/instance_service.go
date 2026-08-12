@@ -3,6 +3,8 @@ package services
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,6 +52,25 @@ func Slugify(name, base string) string {
 	return s
 }
 
+// randomSlugSuffix returns a short hex suffix for making generic slugs unique.
+func randomSlugSuffix() string {
+	b := make([]byte, 3)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
+	}
+	return hex.EncodeToString(b)
+}
+
+// UniqueFallbackSlug ensures empty/non-ASCII names (which all slugify to the
+// same generic "instance" fallback) don't collide. Explicit slug collisions
+// are still reported as errors by the caller.
+func UniqueFallbackSlug(slug string) string {
+	if slug == "instance" || slug == "item" {
+		return slug + "-" + randomSlugSuffix()
+	}
+	return slug
+}
+
 // GenerateInstanceConfig creates fresh secrets for a new instance.
 func GenerateInstanceConfig(name string) (models.InstanceConfig, error) {
 	apiKey, err := security.RandomSecret(32)
@@ -92,8 +113,8 @@ func VolumeName(instanceID uint) string {
 }
 
 // Create creates a new instance row and (for docker mode) its container.
-func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode, slug, image, remoteURL, openAPIURL string, modelID *uint, defaultModel *models.DefaultModel, extraEnv map[string]string, createdBy *uint) (*models.Instance, error) {
-	slug = Slugify(name, slug)
+func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode, slug, image, remoteURL, openAPIURL string, modelID *uint, defaultModel *models.DefaultModel, extraEnv map[string]string, memLimit string, createdBy *uint) (*models.Instance, error) {
+	slug = UniqueFallbackSlug(Slugify(name, slug))
 	var count int64
 	s.db.Model(&models.Instance{}).Where("slug = ?", slug).Count(&count)
 	if count > 0 {
@@ -120,6 +141,7 @@ func (s *InstanceService) Create(ctx context.Context, tenantID uint, name, mode,
 		return nil, err
 	}
 	cfg.ExtraEnv = extraEnv
+	cfg.MemLimit = memLimit
 	cfg.DefaultModel = defaultModel
 	ApplyProviderEnv(&cfg)
 
@@ -216,9 +238,70 @@ func ApplyProviderEnv(cfg *models.InstanceConfig) {
 	if cfg.ExtraEnv == nil {
 		cfg.ExtraEnv = map[string]string{}
 	}
-	if _, exists := cfg.ExtraEnv[envName]; !exists {
-		cfg.ExtraEnv[envName] = dm.Key
+	// Always overwrite: the model's key is the authoritative credential, so a
+	// key rotation must propagate to the container env (built-in providers read
+	// credentials ONLY from the environment).
+	cfg.ExtraEnv[envName] = dm.Key
+}
+
+// RedactedSecret is the placeholder substituted for secret env values in API
+// responses so provider API keys are never returned to the browser.
+const RedactedSecret = "••••••••"
+
+var secretEnvKeyRe = regexp.MustCompile(`(?i)(api[_-]?key|token|secret|password|passwd|credential|private[_-]?key)`)
+
+// isSecretEnvKey reports whether an env var name carries a secret value.
+func isSecretEnvKey(k string) bool {
+	return secretEnvKeyRe.MatchString(k)
+}
+
+// RedactExtraEnv returns a copy of env with secret-looking values masked.
+func RedactExtraEnv(env map[string]string) map[string]string {
+	if len(env) == 0 {
+		return nil
 	}
+	out := make(map[string]string, len(env))
+	for k, v := range env {
+		if isSecretEnvKey(k) {
+			out[k] = RedactedSecret
+		} else {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// RemoveProviderEnv deletes the provider API-key env var injected by
+// ApplyProviderEnv for the given model (used when clearing a default model so
+// the old credential doesn't linger in the container env).
+func RemoveProviderEnv(cfg *models.InstanceConfig, dm *models.DefaultModel) {
+	if dm == nil || cfg.ExtraEnv == nil {
+		return
+	}
+	envName := providerEnvVars[strings.ToLower(strings.TrimSpace(dm.Provider))]
+	if envName != "" {
+		delete(cfg.ExtraEnv, envName)
+	}
+}
+
+// MergeExtraEnv reconciles the client's full extra_env map against the stored
+// one. Secret values are redacted in API responses, so an incoming value equal
+// to the redaction placeholder means "keep the stored value". Keys omitted by
+// the client are dropped (the UI sends the complete map).
+func MergeExtraEnv(current, incoming map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range incoming {
+		if v == RedactedSecret {
+			if existing, ok := current[k]; ok && existing != "" {
+				out[k] = existing
+			}
+			continue
+		}
+		if v != "" {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // waitReady polls the instance dashboard until it becomes healthy, then
@@ -472,6 +555,10 @@ func (s *InstanceService) Health(ctx context.Context, inst *models.Instance) map
 			inst.Status = models.StatusStopped
 			inst.LastHeartbeat = &now
 		}
+	} else if inst.Mode == models.ModeRemote && !result["ok"].(bool) {
+		// A remote instance has no container state to consult — a failed
+		// health probe means the onboarded endpoint is unreachable.
+		inst.Status = models.StatusError
 	}
 	s.db.Model(inst).Updates(map[string]any{"status": inst.Status, "last_heartbeat": inst.LastHeartbeat})
 	result["status"] = inst.Status

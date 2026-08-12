@@ -79,11 +79,16 @@ func (a *API) OIDCGetSettings(c *gin.Context) {
 	if s.Issuer != "" {
 		redirect = strings.TrimRight(a.cfg.PublicBaseURL, "/") + "/api/auth/oidc/callback"
 	}
+	// The client secret is a credential — only expose it to the super admin.
+	clientSecret := s.ClientSecret
+	if middleware.CurrentUser(c).Role != models.RoleSuperAdmin {
+		clientSecret = ""
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":        s.Enabled,
 		"issuer":         s.Issuer,
 		"client_id":      s.ClientID,
-		"client_secret":  s.ClientSecret,
+		"client_secret":  clientSecret,
 		"scopes":         s.Scopes,
 		"admin_claim":    s.AdminClaim,
 		"auto_provision": s.AutoProvision,
@@ -138,7 +143,7 @@ func (a *API) OIDCUpdateSettings(c *gin.Context) {
 func (a *API) OIDCStatus(c *gin.Context) {
 	s := LoadOIDCSettings(a.db, a.cfg)
 	c.JSON(http.StatusOK, gin.H{
-		"enabled":        oidcClient != nil,
+		"enabled":        getOIDCClient() != nil,
 		"issuer":         s.Issuer,
 		"admin_claim":    s.AdminClaim,
 		"auto_provision": s.AutoProvision,

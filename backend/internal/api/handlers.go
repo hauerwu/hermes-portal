@@ -2,6 +2,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -132,7 +133,7 @@ func (a *API) CreateTenant(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
 		return
 	}
-	slug := services.Slugify(body.Name, body.Slug)
+	slug := services.UniqueFallbackSlug(services.Slugify(body.Name, body.Slug))
 	var count int64
 	a.db.Model(&models.Tenant{}).Where("slug = ?", slug).Count(&count)
 	if count > 0 {
@@ -194,7 +195,43 @@ func (a *API) DeleteTenant(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "tenant not found"})
 		return
 	}
-	a.db.Delete(&t)
+	if t.Slug == "default" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot delete the default tenant"})
+		return
+	}
+	// Refuse to orphan live instances/containers: destroy them first.
+	var active int64
+	a.db.Model(&models.Instance{}).Where("tenant_id = ? AND status != ?", t.ID, models.StatusDestroyed).Count(&active)
+	if active > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("tenant has %d active instance(s); destroy them first", active)})
+		return
+	}
+	// Cascade-remove everything that references this tenant so no orphan rows
+	// (users, keys, model library, audit, already-destroyed instance rows) leak.
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("tenant_id = ?", t.ID).Delete(&models.Instance{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id = ?", t.ID).Delete(&models.ApiKey{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id = ?", t.ID).Delete(&models.ModelConfig{}).Error; err != nil {
+			return err
+		}
+		// Never cascade-delete super_admin accounts (they are global operators;
+		// their tenant_id is only the bootstrap/default association).
+		if err := tx.Where("tenant_id = ? AND role != ?", t.ID, models.RoleSuperAdmin).Delete(&models.User{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("tenant_id = ?", t.ID).Delete(&models.AuditLog{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&t).Error
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	database.Audit(a.db, &user.ID, &t.ID, "tenant_delete", t.Slug, "", middleware.ClientIP(c))
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -282,6 +319,11 @@ func (a *API) UpdateUser(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "user belongs to another tenant"})
 		return
 	}
+	// Tenant admins must never demote / deactivate / delete a super admin.
+	if target.Role == models.RoleSuperAdmin && actor.Role != models.RoleSuperAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only a super admin can modify super admin accounts"})
+		return
+	}
 	if body.Username != "" {
 		target.Username = body.Username
 	}
@@ -320,6 +362,10 @@ func (a *API) DeleteUser(c *gin.Context) {
 	}
 	if actor.Role != models.RoleSuperAdmin && (target.TenantID == nil || *target.TenantID != *actor.TenantID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "user belongs to another tenant"})
+		return
+	}
+	if target.Role == models.RoleSuperAdmin && actor.Role != models.RoleSuperAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only a super admin can delete super admin accounts"})
 		return
 	}
 	a.db.Delete(&target)
@@ -427,7 +473,7 @@ func (a *API) CreateInstance(c *gin.Context) {
 		}
 	}
 	inst, err := a.svc.Create(c.Request.Context(), tenantID, body.Name, mode, body.Slug,
-		body.Image, body.RemoteURL, body.OpenAPIURL, body.ModelID, body.DefaultModel, body.ExtraEnv, &actor.ID)
+		body.Image, body.RemoteURL, body.OpenAPIURL, body.ModelID, body.DefaultModel, body.ExtraEnv, body.MemLimit, &actor.ID)
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(err.Error(), "docker is not reachable") {
@@ -454,7 +500,28 @@ type instanceUpdateBody struct {
 	ExtraEnv     map[string]string    `json:"extra_env"`
 	MemLimit     *string              `json:"mem_limit"`
 	DefaultModel *models.DefaultModel `json:"default_model"`
-	ModelID      *uint                `json:"model_id"`
+	ModelID      *OptionalUint        `json:"model_id"`
+}
+
+// OptionalUint distinguishes an absent JSON field from an explicit null so
+// callers can clear a nullable model association (model_id: null).
+type OptionalUint struct {
+	Value uint
+	Set   bool
+}
+
+func (o *OptionalUint) UnmarshalJSON(b []byte) error {
+	o.Set = true
+	if string(b) == "null" {
+		o.Value = 0
+		return nil
+	}
+	var v uint
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	o.Value = v
+	return nil
 }
 
 func (a *API) UpdateInstance(c *gin.Context) {
@@ -466,6 +533,7 @@ func (a *API) UpdateInstance(c *gin.Context) {
 		return
 	}
 	changed := false
+	recreateNeeded := false
 	if body.Name != nil && *body.Name != "" {
 		instance.Name = *body.Name
 		changed = true
@@ -484,6 +552,7 @@ func (a *API) UpdateInstance(c *gin.Context) {
 	if body.Image != nil && *body.Image != "" {
 		instance.Image = *body.Image
 		changed = true
+		recreateNeeded = true
 	}
 	if body.RemoteURL != nil {
 		instance.RemoteURL = *body.RemoteURL
@@ -496,9 +565,10 @@ func (a *API) UpdateInstance(c *gin.Context) {
 	if body.ExtraEnv != nil {
 		var cfg models.InstanceConfig
 		_ = security.UnmarshalJSON(instance.Config, &cfg)
-		cfg.ExtraEnv = body.ExtraEnv
+		cfg.ExtraEnv = services.MergeExtraEnv(cfg.ExtraEnv, body.ExtraEnv)
 		instance.Config = security.MarshalJSON(cfg)
 		changed = true
+		recreateNeeded = true
 	}
 	if body.MemLimit != nil {
 		var cfg models.InstanceConfig
@@ -506,11 +576,13 @@ func (a *API) UpdateInstance(c *gin.Context) {
 		cfg.MemLimit = *body.MemLimit
 		instance.Config = security.MarshalJSON(cfg)
 		changed = true
+		recreateNeeded = true
 	}
 	if body.DefaultModel != nil {
 		var cfg models.InstanceConfig
 		_ = security.UnmarshalJSON(instance.Config, &cfg)
 		if body.DefaultModel.URL == "" && body.DefaultModel.Model == "" {
+			services.RemoveProviderEnv(&cfg, cfg.DefaultModel)
 			cfg.DefaultModel = nil // explicit clear
 		} else {
 			cfg.DefaultModel = body.DefaultModel
@@ -518,33 +590,49 @@ func (a *API) UpdateInstance(c *gin.Context) {
 		services.ApplyProviderEnv(&cfg)
 		instance.Config = security.MarshalJSON(cfg)
 		changed = true
+		recreateNeeded = true
 	}
 	if body.ModelID != nil {
-		var lib models.ModelConfig
-		if err := a.db.First(&lib, *body.ModelID).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "model not found in library"})
-			return
+		if !body.ModelID.Set || body.ModelID.Value == 0 {
+			// model_id: null (or 0) → detach from the library and clear the
+			// snapshotted default model.
+			var cfg models.InstanceConfig
+			_ = security.UnmarshalJSON(instance.Config, &cfg)
+			services.RemoveProviderEnv(&cfg, cfg.DefaultModel)
+			cfg.DefaultModel = nil
+			instance.Config = security.MarshalJSON(cfg)
+			instance.ModelID = nil
+			changed = true
+			recreateNeeded = true
+		} else {
+			var lib models.ModelConfig
+			if err := a.db.First(&lib, body.ModelID.Value).Error; err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "model not found in library"})
+				return
+			}
+			if actor.Role != models.RoleSuperAdmin && (actor.TenantID == nil || lib.TenantID != *actor.TenantID) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "model belongs to another tenant"})
+				return
+			}
+			var cfg models.InstanceConfig
+			_ = security.UnmarshalJSON(instance.Config, &cfg)
+			cfg.DefaultModel = &models.DefaultModel{
+				URL: lib.URL, Model: lib.Model, Key: lib.Key, Provider: lib.Provider,
+			}
+			services.ApplyProviderEnv(&cfg)
+			instance.Config = security.MarshalJSON(cfg)
+			instance.ModelID = &lib.ID
+			changed = true
+			recreateNeeded = true
 		}
-		if actor.Role != models.RoleSuperAdmin && lib.TenantID != *actor.TenantID {
-			c.JSON(http.StatusForbidden, gin.H{"error": "model belongs to another tenant"})
-			return
-		}
-		var cfg models.InstanceConfig
-		_ = security.UnmarshalJSON(instance.Config, &cfg)
-		cfg.DefaultModel = &models.DefaultModel{
-			URL: lib.URL, Model: lib.Model, Key: lib.Key, Provider: lib.Provider,
-		}
-		services.ApplyProviderEnv(&cfg)
-		instance.Config = security.MarshalJSON(cfg)
-		instance.ModelID = body.ModelID
-		changed = true
 	}
 	if changed {
 		a.db.Save(instance)
 		database.Audit(a.db, &actor.ID, &instance.TenantID, "instance_update", instance.Slug, "", middleware.ClientIP(c))
 	}
-	// Recreate the container so image/env changes take effect.
-	if instance.Mode == models.ModeDocker {
+	// Recreate the container only when an image/env/model change requires it —
+	// name/slug edits must not tear down a running instance.
+	if instance.Mode == models.ModeDocker && recreateNeeded {
 		if err := a.svc.Recreate(c.Request.Context(), instance); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("container recreate failed: %v", err)})
 			return
@@ -559,6 +647,7 @@ func (a *API) StartInstance(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	instance.Status = models.StatusStarting
 	database.Audit(a.db, idPtr(middleware.CurrentUser(c).ID), &instance.TenantID, "instance_start", instance.Slug, "", middleware.ClientIP(c))
 	c.JSON(http.StatusOK, publicInstance(instance))
 }
@@ -569,6 +658,7 @@ func (a *API) StopInstance(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	instance.Status = models.StatusStopped
 	database.Audit(a.db, idPtr(middleware.CurrentUser(c).ID), &instance.TenantID, "instance_stop", instance.Slug, "", middleware.ClientIP(c))
 	c.JSON(http.StatusOK, publicInstance(instance))
 }
@@ -579,6 +669,7 @@ func (a *API) RestartInstance(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	instance.Status = models.StatusStarting
 	database.Audit(a.db, idPtr(middleware.CurrentUser(c).ID), &instance.TenantID, "instance_restart", instance.Slug, "", middleware.ClientIP(c))
 	c.JSON(http.StatusOK, publicInstance(instance))
 }
@@ -825,8 +916,9 @@ func publicTenant(t *models.Tenant) gin.H {
 func publicInstance(i *models.Instance) gin.H {
 	var cfg models.InstanceConfig
 	_ = security.UnmarshalJSON(i.Config, &cfg)
-	// Never leak secrets (api key / dashboard credentials are hidden).
-	safe := gin.H{"extra_env": cfg.ExtraEnv, "mem_limit": cfg.MemLimit}
+	// Never leak secrets (api key / dashboard credentials are hidden);
+	// extra_env may contain injected provider API keys, so mask those too.
+	safe := gin.H{"extra_env": services.RedactExtraEnv(cfg.ExtraEnv), "mem_limit": cfg.MemLimit}
 	if cfg.DefaultModel != nil {
 		safe["default_model"] = gin.H{
 			"url":      cfg.DefaultModel.URL,

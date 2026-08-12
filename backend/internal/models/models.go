@@ -135,9 +135,9 @@ type Instance struct {
 //   - (legacy) tenant-wide key: TenantID != nil && InstanceID == nil —
 //     all instances of the tenant.
 type ApiKey struct {
-	ID         uint  `gorm:"primaryKey"`
-	TenantID   *uint `gorm:"index"` // NULL = global super-admin key
-	InstanceID *uint `gorm:"index"` // NULL = tenant-wide (or global)
+	ID         uint   `gorm:"primaryKey"`
+	TenantID   *uint  `gorm:"index"` // NULL = global super-admin key
+	InstanceID *uint  `gorm:"index"` // NULL = tenant-wide (or global)
 	Name       string `gorm:"size:128;not null"`
 	KeyPrefix  string `gorm:"size:16;not null"`
 	KeyHash    string `gorm:"size:64;uniqueIndex;not null"`

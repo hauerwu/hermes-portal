@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Trash2, Users as UsersIcon } from "lucide-react";
 import Modal from "@/components/Modal";
 import { useConfirm } from "@/lib/confirm";
-import { api, type User } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { api, type Tenant, type User } from "@/lib/api";
 
 const roleLabel: Record<string, string> = {
   super_admin: "超级管理员",
@@ -111,19 +112,40 @@ export default function UsersPage() {
 }
 
 function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { user: me } = useAuth();
+  const isSuper = me?.role === "super_admin";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [tenantId, setTenantId] = useState<number | "">("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isSuper) return;
+    api.listTenants().then((t) => {
+      setTenants(t);
+      if (t.length > 0) setTenantId(t[0].id);
+    }).catch(() => {});
+  }, [isSuper]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      await api.createUser({ username, password, email, role: role as User["role"] });
+      const body: Record<string, unknown> = { username, password, email, role: role as User["role"] };
+      if (isSuper) {
+        if (tenantId === "") {
+          setError("请选择租户");
+          setBusy(false);
+          return;
+        }
+        body.tenant_id = tenantId;
+      }
+      await api.createUser(body);
       onCreated();
       onClose();
     } catch (err: any) {
@@ -151,12 +173,24 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <input value={email} onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
           </div>
+          {isSuper && (
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">所属租户</label>
+              <select value={tenantId} onChange={(e) => setTenantId(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500">
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}（{t.slug}）</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-xs text-zinc-400">角色</label>
             <select value={role} onChange={(e) => setRole(e.target.value)}
               className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500">
               <option value="member">成员（只读）</option>
               <option value="tenant_admin">实例管理员</option>
+              {isSuper && <option value="super_admin">超级管理员</option>}
             </select>
           </div>
           {error && <div className="text-sm text-red-400">{error}</div>}

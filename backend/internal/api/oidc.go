@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
@@ -30,7 +31,30 @@ type oidcState struct {
 	oauth    *oauth2.Config
 }
 
-var oidcClient *oidcState
+var (
+	oidcMu     sync.RWMutex
+	oidcClient *oidcState
+)
+
+func setOIDCClient(s *oidcState) {
+	oidcMu.Lock()
+	oidcClient = s
+	oidcMu.Unlock()
+}
+
+func getOIDCClient() *oidcState {
+	oidcMu.RLock()
+	defer oidcMu.RUnlock()
+	return oidcClient
+}
+
+// oidcStateCookie carries the OAuth state between /authorize and /callback so
+// the callback can verify it and reject login-CSRF attempts.
+const oidcStateCookie = "portal_oidc_state"
+
+func oidcCookieSecure(cfg *config.Config) bool {
+	return strings.HasPrefix(strings.ToLower(cfg.PublicBaseURL), "https")
+}
 
 // InitOIDC performs provider discovery; safe to call repeatedly (a Settings
 // page save re-invokes it to hot-reload the client).
@@ -39,7 +63,7 @@ func (a *API) InitOIDC(cfg *config.Config, s *OIDCSettings) error {
 		s = LoadOIDCSettings(a.db, cfg)
 	}
 	if !s.Enabled || s.Issuer == "" || s.ClientID == "" {
-		oidcClient = nil
+		setOIDCClient(nil)
 		log.Printf("[portal] OIDC disabled")
 		return nil
 	}
@@ -53,7 +77,7 @@ func (a *API) InitOIDC(cfg *config.Config, s *OIDCSettings) error {
 	if strings.TrimSpace(s.Scopes) != "" {
 		scopes = strings.FieldsFunc(s.Scopes, func(r rune) bool { return r == ' ' || r == ',' })
 	}
-	oidcClient = &oidcState{
+	setOIDCClient(&oidcState{
 		provider: provider,
 		oauth: &oauth2.Config{
 			ClientID:     s.ClientID,
@@ -62,7 +86,7 @@ func (a *API) InitOIDC(cfg *config.Config, s *OIDCSettings) error {
 			Endpoint:     provider.Endpoint(),
 			Scopes:       scopes,
 		},
-	}
+	})
 	log.Printf("[portal] OIDC enabled: %s", s.Issuer)
 	return nil
 }
@@ -110,7 +134,8 @@ func claimTruthy(v any) bool {
 }
 
 func (a *API) OIDCAuthorize(c *gin.Context) {
-	if oidcClient == nil {
+	oc := getOIDCClient()
+	if oc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OIDC not configured"})
 		return
 	}
@@ -119,17 +144,29 @@ func (a *API) OIDCAuthorize(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "state error"})
 		return
 	}
-	// Nonce is optional here (PKCE is used by most providers).
-	url := oidcClient.oauth.AuthCodeURL(state, oidc.Nonce(state))
+	// Remember the state so the callback can verify it (login-CSRF defense).
+	// The nonce mirrors the state so the ID token can be checked the same way.
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     oidcStateCookie,
+		Value:    state,
+		Path:     "/api/auth/oidc",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   oidcCookieSecure(a.cfg),
+		MaxAge:   600,
+	})
+	url := oc.oauth.AuthCodeURL(state, oidc.Nonce(state))
 	c.Redirect(http.StatusFound, url)
 }
 
 func (a *API) OIDCCallback(c *gin.Context) {
-	if oidcClient == nil {
+	oc := getOIDCClient()
+	if oc == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "OIDC not configured"})
 		return
 	}
 	code := c.Query("code")
+	state := c.Query("state")
 	errDesc := c.Query("error_description")
 	if c.Query("error") != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": errDesc})
@@ -139,9 +176,24 @@ func (a *API) OIDCCallback(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing code"})
 		return
 	}
+	// Verify the OAuth state against the value we set at /authorize.
+	if state == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing state"})
+		return
+	}
+	stateCookie, err := c.Cookie(oidcStateCookie)
+	if err != nil || stateCookie != state {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid state"})
+		return
+	}
+	// Consume the state cookie immediately (one-time use).
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name: oidcStateCookie, Value: "", Path: "/api/auth/oidc",
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: oidcCookieSecure(a.cfg), MaxAge: -1,
+	})
 
 	ctx := c.Request.Context()
-	oauthToken, err := oidcClient.oauth.Exchange(ctx, code)
+	oauthToken, err := oc.oauth.Exchange(ctx, code)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "token exchange failed"})
 		return
@@ -151,7 +203,10 @@ func (a *API) OIDCCallback(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing id_token"})
 		return
 	}
-	verifier := oidcClient.provider.Verifier(&oidc.Config{ClientID: a.cfg.OIDCClientID})
+	sso := LoadOIDCSettings(a.db, a.cfg)
+	// Verify against the *effective* client id (page-configurable, persisted in
+	// SQLite) — not the stale env var used only as the initial default.
+	verifier := oc.provider.Verifier(&oidc.Config{ClientID: sso.ClientID})
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id_token verification failed"})
@@ -162,16 +217,21 @@ func (a *API) OIDCCallback(c *gin.Context) {
 		Sub               string `json:"sub"`
 		Email             string `json:"email"`
 		PreferredUsername string `json:"preferred_username"`
+		Nonce             string `json:"nonce"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "claims parse failed"})
+		return
+	}
+	// The nonce mirrors the OAuth state; reject a token that doesn't echo it.
+	if claims.Nonce != "" && claims.Nonce != state {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "nonce mismatch"})
 		return
 	}
 
 	// OIDC admin mapping: when PORTAL_OIDC_ADMIN_CLAIM is configured and its
 	// value is truthy for this user, the SSO user gets tenant_admin (existing
 	// members are upgraded on login, never downgraded).
-	sso := LoadOIDCSettings(a.db, a.cfg)
 	targetRole := models.RoleMember
 	if isOIDCAdmin(idToken, sso.AdminClaim) {
 		targetRole = models.RoleTenantAdmin

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -271,8 +272,7 @@ func (g *GatewayProxy) WebhookHandler() gin.HandlerFunc {
 		instance := c.MustGet("instance").(*models.Instance)
 		channel := c.Param("channel")
 		port, basePath := WebhookTarget(channel)
-		host := instanceHost(instance, port)
-		target, err := url.Parse(fmt.Sprintf("http://%s", host))
+		target, err := url.Parse(webhookBaseURL(instance, port))
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "bad target"})
 			return
@@ -301,7 +301,11 @@ func (g *GatewayProxy) baseProxy(target *url.URL, director func(*http.Request)) 
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 		req.Host = target.Host
-		req.Header.Set("X-Forwarded-Proto", "https")
+		scheme := "http"
+		if req.TLS != nil || strings.EqualFold(req.Header.Get("X-Forwarded-Proto"), "https") {
+			scheme = "https"
+		}
+		req.Header.Set("X-Forwarded-Proto", scheme)
 		director(req)
 	}
 	return rp
@@ -359,18 +363,29 @@ func (g *GatewayProxy) openAPIBase(instance *models.Instance) string {
 	return fmt.Sprintf("http://%s:%d/v1", name, g.cfg.HermesOpenAPIPort)
 }
 
-func instanceHost(instance *models.Instance, port int) string {
+// webhookBaseURL computes the base URL of an instance's channel webhook
+// server. Local instances use the container name on the portal network;
+// remote instances keep their declared scheme (https is preserved) and use
+// the webhook port when the remote URL doesn't carry one.
+func webhookBaseURL(instance *models.Instance, port int) string {
 	if instance.Mode == models.ModeRemote {
-		u, err := url.Parse(instance.RemoteURL)
-		if err == nil {
-			return u.Host
+		if u, err := url.Parse(instance.RemoteURL); err == nil {
+			scheme := u.Scheme
+			if scheme == "" {
+				scheme = "http"
+			}
+			p := u.Port()
+			if p == "" {
+				p = strconv.Itoa(port)
+			}
+			return fmt.Sprintf("%s://%s:%s", scheme, u.Hostname(), p)
 		}
 	}
 	name := instance.ContainerName
 	if name == "" {
 		name = fmt.Sprintf("hermes-inst-%d", instance.ID)
 	}
-	return fmt.Sprintf("%s:%d", name, port)
+	return fmt.Sprintf("http://%s:%d", name, port)
 }
 
 func stripGatewayPrefix(path, slug, marker string) string {

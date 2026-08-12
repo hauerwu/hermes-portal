@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import Modal from "@/components/Modal";
 import { useConfirm } from "@/lib/confirm";
-import { api, type Instance, type ModelConfig } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { api, type Instance, type ModelConfig, type Tenant } from "@/lib/api";
 
 const statusColor: Record<string, string> = {
   running: "bg-emerald-500/15 text-emerald-300",
@@ -25,6 +26,8 @@ const statusColor: Record<string, string> = {
 
 export default function InstancesPage() {
   const confirmDialog = useConfirm();
+  const { user } = useAuth();
+  const canManage = user?.role === "super_admin" || user?.role === "tenant_admin";
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,12 +54,17 @@ export default function InstancesPage() {
     const timer = setInterval(async () => {
       try {
         const list = await api.listInstances();
-        await Promise.all(
+        const checks = await Promise.all(
           list
             .filter((i) => i.status === "starting" || i.status === "running")
-            .map((i) => api.instanceHealth(i.id).catch(() => null))
+            .map(async (i) => ({ id: i.id, health: await api.instanceHealth(i.id).catch(() => null) }))
         );
-        setInstances(await api.listInstances());
+        setInstances(
+          list.map((i) => {
+            const h = checks.find((c) => c.id === i.id)?.health;
+            return h && h.status ? { ...i, status: h.status } : i;
+          })
+        );
       } catch {
         /* 静默 */
       }
@@ -65,20 +73,35 @@ export default function InstancesPage() {
   }, []);
 
   const act = async (inst: Instance, action: "start" | "stop" | "restart") => {
-    await api.instanceAction(inst.id, action);
-    load();
+    try {
+      await api.instanceAction(inst.id, action);
+      load();
+    } catch (e: any) {
+      setError(e.message || "操作失败");
+    }
   };
 
   const destroy = async (inst: Instance) => {
+    const isDocker = inst.mode === "docker";
     const ok = await confirmDialog({
-      title: "销毁实例",
-      message: <>确认销毁实例 <b className="text-amber-300">「{inst.name}」</b>？<br />容器与数据卷将被删除，且不可恢复。</>,
-      confirmText: "销毁",
+      title: isDocker ? "销毁实例" : "移除纳管",
+      message: (
+        <>
+          确认{isDocker ? "销毁" : "移除"}实例 <b className="text-amber-300">「{inst.name}」</b>？
+          <br />
+          {isDocker ? "容器与数据卷将被删除，且不可恢复。" : "该实例将从门户移除纳管（远程实例本身不受影响）。"}
+        </>
+      ),
+      confirmText: isDocker ? "销毁" : "移除",
       danger: true,
     });
     if (!ok) return;
-    await api.destroyInstance(inst.id);
-    load();
+    try {
+      await api.destroyInstance(inst.id);
+      load();
+    } catch (e: any) {
+      setError(e.message || "销毁失败");
+    }
   };
 
   return (
@@ -95,12 +118,14 @@ export default function InstancesPage() {
           >
             <RefreshCw className="h-3.5 w-3.5" /> 刷新
           </button>
-          <button
-            onClick={() => setCreateOpen(true)}
-            className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-black hover:bg-amber-400"
-          >
-            <Plus className="h-4 w-4" /> 新建实例
-          </button>
+          {canManage && (
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-black hover:bg-amber-400"
+            >
+              <Plus className="h-4 w-4" /> 新建实例
+            </button>
+          )}
         </div>
       </div>
 
@@ -146,35 +171,45 @@ export default function InstancesPage() {
                 </Link>
               </div>
               <div className="flex gap-1.5">
-                <button
-                  onClick={() => act(inst, "start")}
-                  disabled={inst.status === "running" || inst.mode !== "docker"}
-                  className="flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-40"
-                  title="启动（仅本地实例）"
-                >
-                  <Play className="h-3 w-3" /> 启动
-                </button>
-                <button
-                  onClick={() => act(inst, "stop")}
-                  disabled={inst.status !== "running" || inst.mode !== "docker"}
-                  className="flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-40"
-                >
-                  <Square className="h-3 w-3" /> 停止
-                </button>
-                <button
-                  onClick={() => act(inst, "restart")}
-                  disabled={inst.mode !== "docker"}
-                  className="flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-40"
-                >
-                  <RefreshCw className="h-3 w-3" /> 重启
-                </button>
-                <button
-                  onClick={() => destroy(inst)}
-                  disabled={inst.mode !== "docker"}
-                  className="ml-auto flex items-center gap-1 rounded-md border border-red-900 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-40"
-                >
-                  <Trash2 className="h-3 w-3" /> 销毁
-                </button>
+                {canManage ? (
+                  <>
+                    <button
+                      onClick={() => act(inst, "start")}
+                      disabled={inst.status === "running" || inst.mode !== "docker"}
+                      className="flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-40"
+                      title="启动（仅本地实例）"
+                    >
+                      <Play className="h-3 w-3" /> 启动
+                    </button>
+                    <button
+                      onClick={() => act(inst, "stop")}
+                      disabled={inst.status !== "running" || inst.mode !== "docker"}
+                      className="flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-40"
+                    >
+                      <Square className="h-3 w-3" /> 停止
+                    </button>
+                    <button
+                      onClick={() => act(inst, "restart")}
+                      disabled={inst.mode !== "docker"}
+                      className="flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 disabled:opacity-40"
+                    >
+                      <RefreshCw className="h-3 w-3" /> 重启
+                    </button>
+                    <button
+                      onClick={() => destroy(inst)}
+                      className="ml-auto flex items-center gap-1 rounded-md border border-red-900 px-2 py-1 text-xs text-red-400 hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-3 w-3" /> {inst.mode === "docker" ? "销毁" : "移除"}
+                    </button>
+                  </>
+                ) : (
+                  <Link
+                    to={`/instances/${inst.id}`}
+                    className="flex flex-1 items-center justify-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800"
+                  >
+                    查看详情
+                  </Link>
+                )}
               </div>
             </div>
           ))}
@@ -187,12 +222,17 @@ export default function InstancesPage() {
 }
 
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { user: me } = useAuth();
+  const isSuper = me?.role === "super_admin";
   const [models, setModels] = useState<ModelConfig[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [tenantId, setTenantId] = useState<number | "">("");
   const [modelId, setModelId] = useState<number | "">("");
   const [mode, setMode] = useState<"docker" | "remote">("docker");
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [image, setImage] = useState("nousresearch/hermes-agent");
+  const [memLimit, setMemLimit] = useState("");
   const [remoteUrl, setRemoteUrl] = useState("");
   const [openapiUrl, setOpenapiUrl] = useState("");
   const [modelUrl, setModelUrl] = useState("");
@@ -207,7 +247,13 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
       const def = m.find((x) => x.is_default);
       if (def) setModelId(def.id);
     }).catch(() => {});
-  }, []);
+    if (isSuper) {
+      api.listTenants().then((t) => {
+        setTenants(t);
+        if (t.length > 0) setTenantId(t[0].id);
+      }).catch(() => {});
+    }
+  }, [isSuper]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -215,8 +261,10 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     setError("");
     try {
       const body: Record<string, unknown> = { name, mode, slug };
+      if (isSuper) body.tenant_id = tenantId === "" ? undefined : tenantId;
       if (mode === "docker") {
         body.image = image;
+        if (memLimit.trim()) body.mem_limit = memLimit.trim();
         if (modelId !== "") {
           body.model_id = modelId; // 从模型库快照
         } else if (modelUrl.trim() && modelName.trim()) {
@@ -264,6 +312,23 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <input value={name} onChange={(e) => setName(e.target.value)} required
               className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
           </div>
+          {isSuper && (
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">所属租户</label>
+              <select value={tenantId} onChange={(e) => {
+                  const tid = e.target.value === "" ? "" : Number(e.target.value);
+                  setTenantId(tid);
+                  // 切换租户后，模型库联动为所选租户的默认模型（避免跨租户选错）
+                  const def = models.find((m) => m.is_default && m.tenant_id === tid);
+                  setModelId(def ? def.id : "");
+                }}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500">
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}（{t.slug}）</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-xs text-zinc-400">Slug（留空自动生成）</label>
             <input value={slug} onChange={(e) => setSlug(e.target.value)}
@@ -271,10 +336,17 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           </div>
           {mode === "docker" ? (
             <>
-              <div>
-                <label className="mb-1 block text-xs text-zinc-400">镜像</label>
-                <input value={image} onChange={(e) => setImage(e.target.value)}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-xs text-zinc-400">镜像</label>
+                  <input value={image} onChange={(e) => setImage(e.target.value)}
+                    className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-zinc-400">内存限制（如 2g）</label>
+                  <input value={memLimit} onChange={(e) => setMemLimit(e.target.value)} placeholder="留空 = 不限"
+                    className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500" />
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-xs text-zinc-400">使用模型库配置</label>
@@ -284,11 +356,13 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
                   className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500"
                 >
                   <option value="">不选（手动配置）</option>
-                  {models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}（{m.model}{m.is_default ? " · 默认" : ""}）
-                    </option>
-                  ))}
+                  {models
+                    .filter((m) => !isSuper || tenantId === "" || m.tenant_id === tenantId)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}（{m.model}{m.is_default ? " · 默认" : ""}）
+                      </option>
+                    ))}
                 </select>
                 {models.length === 0 && (
                   <div className="mt-1 text-[11px] text-zinc-600">模型库为空，可到「模型配置」页添加，或下方手动填写</div>

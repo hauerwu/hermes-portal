@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { KeyRound, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -13,9 +13,14 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [oidc, setOidc] = useState<{ enabled: boolean; issuer: string } | null>(null);
 
-  useState(() => {
-    api.oidcStatus().then(setOidc).catch(() => setOidc({ enabled: false, issuer: "" }));
-  });
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .oidcStatus()
+      .then((s) => { if (!cancelled) setOidc(s); })
+      .catch(() => { if (!cancelled) setOidc({ enabled: false, issuer: "" }); });
+    return () => { cancelled = true; };
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

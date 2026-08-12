@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Cpu, FlaskConical, Loader2, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import Modal from "@/components/Modal";
 import { useConfirm } from "@/lib/confirm";
-import { api, type ModelConfig } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { api, type ModelConfig, type Tenant } from "@/lib/api";
 
 const providerLabel: Record<string, string> = {
   custom: "自定义端点",
@@ -16,6 +17,8 @@ const providerLabel: Record<string, string> = {
 
 export default function ModelConfigsPage() {
   const confirmDialog = useConfirm();
+  const { user } = useAuth();
+  const canManage = user?.role === "super_admin" || user?.role === "tenant_admin";
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -85,12 +88,14 @@ export default function ModelConfigsPage() {
           <h1 className="text-xl font-semibold">模型配置</h1>
           <p className="text-sm text-zinc-500">模型库：维护多个推理端点，创建实例时选择使用</p>
         </div>
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-black hover:bg-amber-400"
-        >
-          <Plus className="h-4 w-4" /> 新建模型
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-black hover:bg-amber-400"
+          >
+            <Plus className="h-4 w-4" /> 新建模型
+          </button>
+        )}
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-800 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
@@ -132,12 +137,16 @@ export default function ModelConfigsPage() {
                       <FlaskConical className="h-3.5 w-3.5" />
                     )}
                   </button>
-                  <button onClick={() => setEditing(m)} className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="编辑">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button onClick={() => remove(m)} className="rounded-md p-1.5 text-red-400 hover:bg-red-500/10" title="删除">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {canManage && (
+                    <>
+                      <button onClick={() => setEditing(m)} className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title="编辑">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => remove(m)} className="rounded-md p-1.5 text-red-400 hover:bg-red-500/10" title="删除">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="space-y-1 text-xs text-zinc-500">
@@ -164,7 +173,7 @@ export default function ModelConfigsPage() {
                   </div>
                 )}
               </div>
-              {!m.is_default && (
+              {!m.is_default && canManage && (
                 <button
                   onClick={() => makeDefault(m)}
                   className="mt-3 rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 hover:border-amber-500 hover:text-amber-300"
@@ -190,14 +199,26 @@ export default function ModelConfigsPage() {
 }
 
 function ModelModal({ model, onClose, onSaved }: { model: ModelConfig | null; onClose: () => void; onSaved: () => void }) {
+  const { user: me } = useAuth();
+  const isSuper = me?.role === "super_admin";
   const [name, setName] = useState(model?.name ?? "");
   const [provider, setProvider] = useState(model?.provider ?? "custom");
   const [url, setUrl] = useState(model?.url ?? "");
   const [modelName, setModelName] = useState(model?.model ?? "");
   const [key, setKey] = useState("");
   const [isDefault, setIsDefault] = useState(model?.is_default ?? false);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [tenantId, setTenantId] = useState<number | "">("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!isSuper || model) return;
+    api.listTenants().then((t) => {
+      setTenants(t);
+      if (t.length > 0) setTenantId(t[0].id);
+    }).catch(() => {});
+  }, [isSuper, model]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,6 +230,7 @@ function ModelModal({ model, onClose, onSaved }: { model: ModelConfig | null; on
       if (model) {
         await api.updateModel(model.id, body);
       } else {
+        if (isSuper) body.tenant_id = tenantId === "" ? undefined : tenantId;
         await api.createModel(body);
       }
       onSaved();
@@ -222,6 +244,17 @@ function ModelModal({ model, onClose, onSaved }: { model: ModelConfig | null; on
   return (
     <Modal open onClose={onClose} title={model ? "编辑模型" : "新建模型"}>
       <form onSubmit={submit} className="space-y-4">
+          {isSuper && !model && (
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">所属租户</label>
+              <select value={tenantId} onChange={(e) => setTenantId(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none focus:border-amber-500">
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}（{t.slug}）</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs text-zinc-400">显示名称</label>

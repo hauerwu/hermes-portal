@@ -10,6 +10,7 @@ export default function ApiKeysPage() {
   const confirmDialog = useConfirm();
   const { user } = useAuth();
   const isSuper = user?.role === "super_admin";
+  const canManage = isSuper || user?.role === "tenant_admin";
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,12 +57,14 @@ export default function ApiKeysPage() {
           <h1 className="text-xl font-semibold">API Keys</h1>
           <p className="text-sm text-zinc-500">用于统一网关 OpenAI API 的鉴权凭据（仅显示一次）</p>
         </div>
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-black hover:bg-amber-400"
-        >
-          <Plus className="h-4 w-4" /> 新建 Key
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-black hover:bg-amber-400"
+          >
+            <Plus className="h-4 w-4" /> 新建 Key
+          </button>
+        )}
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-800 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
@@ -107,14 +110,16 @@ export default function ApiKeysPage() {
                   </td>
                   <td className="px-4 py-2.5 text-xs text-zinc-500">{key.last_used ? new Date(key.last_used).toLocaleString() : "-"}</td>
                   <td className="px-4 py-2.5 text-right">
-                    <button
-                      onClick={() => revoke(key)}
-                      disabled={!key.active}
-                      className="text-red-400 hover:text-red-300 disabled:opacity-30"
-                      title="吊销"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {canManage && (
+                      <button
+                        onClick={() => revoke(key)}
+                        disabled={!key.active}
+                        className="text-red-400 hover:text-red-300 disabled:opacity-30"
+                        title="吊销"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

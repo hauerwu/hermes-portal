@@ -28,6 +28,17 @@ export default function DashboardPage() {
     load();
   }, [load]);
 
+  // Keep the portal session cookie (and the embedded iframe's auth) fresh: a
+  // periodic authenticated call triggers the access-token auto-refresh, which
+  // also re-issues the HttpOnly cookie. Otherwise a long-running dashboard
+  // view goes blank once the 1-hour access token expires.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      api.me().catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div className="flex h-dvh flex-col bg-zinc-950">
       {/* ── 工具栏 ── */}

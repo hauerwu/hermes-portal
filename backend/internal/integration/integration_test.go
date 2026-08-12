@@ -19,6 +19,8 @@ import (
 	"hermesportal/internal/services"
 )
 
+func uintPtr(v uint) *uint { return &v }
+
 // newTestServer boots an in-memory portal (SQLite in a temp dir, no docker).
 func newTestServer(t *testing.T) (*gin.Engine, *config.Config, *models.User, *models.User) {
 	t.Helper()
@@ -273,6 +275,92 @@ func TestDashboardProxyAuth(t *testing.T) {
 	w = doReq(t, engine, "GET", "/instances/1/dashboard/", adminTok, nil)
 	if w.Code == http.StatusUnauthorized {
 		t.Fatalf("dashboard auth failed with token")
+	}
+}
+
+func TestDeleteTenantGuards(t *testing.T) {
+	engine, cfg, root, _ := newTestServer(t)
+	rootTok := tokenFor(t, cfg, root)
+
+	// Deleting the default tenant is forbidden (bootstrap + super admin live there).
+	w := doReq(t, engine, "DELETE", "/api/tenants/1", rootTok, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("default tenant delete: %d %s", w.Code, w.Body.String())
+	}
+
+	// Tenant 2 has an active (running) instance → refuse with conflict.
+	w = doReq(t, engine, "DELETE", "/api/tenants/2", rootTok, nil)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("tenant with active instance: %d %s", w.Code, w.Body.String())
+	}
+
+	// Destroy tenant2's instance, then delete the tenant successfully.
+	w = doReq(t, engine, "DELETE", "/api/instances/1", tokenFor(t, cfg, root), nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("destroy instance: %d %s", w.Code, w.Body.String())
+	}
+	w = doReq(t, engine, "DELETE", "/api/tenants/2", rootTok, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("tenant delete after destroy: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSuperAdminProtectedFromTenantAdmin(t *testing.T) {
+	engine, cfg, root, _ := newTestServer(t)
+	rootTok := tokenFor(t, cfg, root)
+
+	// Create a tenant_admin in the DEFAULT tenant (same tenant as root).
+	w := doReq(t, engine, "POST", "/api/users", rootTok, map[string]any{
+		"username": "default-admin", "password": "pw", "role": "tenant_admin", "tenant_id": 1,
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create default tenant admin: %d %s", w.Code, w.Body.String())
+	}
+	var created struct {
+		ID uint `json:"id"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &created)
+
+	// The tenant admin logs in and tries to demote / deactivate / delete root.
+	defAdminTok := tokenFor(t, cfg, &models.User{ID: created.ID, TenantID: uintPtr(1), Role: models.RoleTenantAdmin, Active: true})
+	w = doReq(t, engine, "PUT", "/api/users/1", defAdminTok, map[string]any{"role": "member"})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("tenant admin demoting super admin: %d", w.Code)
+	}
+	w = doReq(t, engine, "DELETE", "/api/users/1", defAdminTok, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("tenant admin deleting super admin: %d", w.Code)
+	}
+}
+
+func TestInstanceCreateMemLimitAndRedaction(t *testing.T) {
+	engine, cfg, root, _ := newTestServer(t)
+	rootTok := tokenFor(t, cfg, root)
+
+	// Create a remote instance (no docker needed) with mem_limit + secret env.
+	w := doReq(t, engine, "POST", "/api/instances", rootTok, map[string]any{
+		"name":       "Mem Inst",
+		"mode":       "remote",
+		"remote_url": "http://mem.example:9119",
+		"mem_limit":  "2g",
+		"extra_env":  map[string]string{"DEEPSEEK_API_KEY": "sk-secret"},
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create instance: %d %s", w.Code, w.Body.String())
+	}
+	var inst struct {
+		ID     uint `json:"id"`
+		Config struct {
+			MemLimit string            `json:"mem_limit"`
+			ExtraEnv map[string]string `json:"extra_env"`
+		} `json:"config"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &inst)
+	if inst.Config.MemLimit != "2g" {
+		t.Fatalf("mem_limit not persisted: %q", inst.Config.MemLimit)
+	}
+	if inst.Config.ExtraEnv["DEEPSEEK_API_KEY"] != services.RedactedSecret {
+		t.Fatalf("secret env leaked in response: %q", inst.Config.ExtraEnv["DEEPSEEK_API_KEY"])
 	}
 }
 
