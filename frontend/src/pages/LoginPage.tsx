@@ -37,8 +37,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-full items-center justify-center bg-zinc-950">
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
+    <div className="flex h-full items-center justify-center bg-zinc-950 p-4">
+      <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl sm:p-8">
         <div className="mb-6 flex items-center gap-2">
           <KeyRound className="h-6 w-6 text-amber-400" />
           <h1 className="text-xl font-semibold">Hermes Portal</h1>

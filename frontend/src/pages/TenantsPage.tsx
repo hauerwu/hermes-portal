@@ -38,8 +38,8 @@ export default function TenantsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="mx-auto max-w-4xl p-4 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">租户管理</h1>
           <p className="text-sm text-zinc-500">多租户数据隔离边界（超级管理员）</p>
@@ -57,8 +57,8 @@ export default function TenantsPage() {
       {loading ? (
         <div className="flex justify-center py-16 text-zinc-500"><Loader2 className="h-6 w-6 animate-spin" /></div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-800">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-xl border border-zinc-800">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-zinc-900 text-left text-xs text-zinc-500">
               <tr>
                 <th className="px-4 py-2.5">租户</th>

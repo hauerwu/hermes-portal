@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router";
+import { useEffect, useState } from "react";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import {
   Boxes,
   Cpu,
@@ -7,13 +7,15 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  Menu,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
-  Moon,
   Settings,
   Shield,
   Sun,
   Users,
+  X,
 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ConfirmProvider } from "@/lib/confirm";
@@ -35,8 +37,35 @@ const SIDEBAR_KEY = "portal.sidebar.collapsed";
 function Shell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "1");
+  // 移动端抽屉（< md）：顶栏汉堡按钮打开，路由变化 / ESC / 点遮罩关闭
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getTheme);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // 抽屉打开时锁定 body 滚动
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
+  // ESC 关闭抽屉
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   if (!user) return <Navigate to="/auth/login" replace />;
 
@@ -62,24 +91,57 @@ function Shell() {
   const roleLabel =
     user.role === "super_admin" ? "超级管理员" : user.role === "tenant_admin" ? "实例管理员" : "成员";
 
+  // 桌面收起态只影响 md+ 的静态侧栏；移动端抽屉始终展示完整菜单
+  const iconOnly = collapsed && !mobileOpen;
+
   return (
     <div className="flex h-full">
+      {/* ── 移动端顶栏（< md）── */}
+      <header className="fixed inset-x-0 top-0 z-40 flex h-12 shrink-0 items-center gap-2 border-b border-zinc-800 bg-zinc-900/90 px-3 backdrop-blur md:hidden">
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="打开菜单"
+          className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <LayoutDashboard className="h-5 w-5 shrink-0 text-amber-400" />
+        <span className="truncate font-semibold">Hermes Portal</span>
+        <div className="flex-1" />
+        <button
+          onClick={() => setTheme(toggleTheme())}
+          className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          title={theme === "dark" ? "切换为浅色风格" : "切换为深色风格"}
+        >
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
+      </header>
+
+      {/* ── 移动端抽屉遮罩 ── */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 animate-fade-in md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* ── 侧栏：移动端 = 滑出抽屉；桌面端 = 静态可收起侧栏 ── */}
       <aside
-        className={`${
-          collapsed ? "w-14" : "w-56"
-        } flex shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/60 transition-[width] duration-200 ease-in-out`}
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 transform flex-col border-r border-zinc-800 bg-zinc-900/95 backdrop-blur transition-transform duration-200 ease-in-out md:static md:z-auto md:translate-x-0 md:bg-zinc-900/60 md:backdrop-blur-none md:transition-[width] ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        } ${collapsed ? "md:w-14" : "md:w-56"}`}
       >
-        {/* ── 顶栏：Logo + 收放按钮 ── */}
+        {/* ── 顶栏：Logo + 收放/关闭按钮 ── */}
         <div
           className={`flex items-center border-b border-zinc-800 py-3.5 ${
-            collapsed ? "justify-center px-0" : "justify-between px-3"
+            iconOnly ? "md:justify-center md:px-0" : "justify-between px-3"
           }`}
         >
-          {collapsed ? (
-            // 收起态侧栏仅 56px 宽：只保留展开按钮并居中，避免按钮溢出面板
+          {iconOnly ? (
+            // 桌面收起态侧栏仅 56px 宽：只保留展开按钮并居中，避免按钮溢出面板
             <button
               onClick={toggleSidebar}
-              className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+              className="hidden rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 md:block"
               title="展开菜单"
             >
               <PanelLeftOpen className="h-4 w-4" />
@@ -96,17 +158,24 @@ function Shell() {
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   onClick={() => setTheme(toggleTheme())}
-                  className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                  className="hidden rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 md:block"
                   title={theme === "dark" ? "切换为浅色风格" : "切换为深色风格"}
                 >
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </button>
                 <button
                   onClick={toggleSidebar}
-                  className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                  className="hidden rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 md:block"
                   title="收起菜单"
                 >
                   <PanelLeftClose className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setMobileOpen(false)}
+                  className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 md:hidden"
+                  title="关闭菜单"
+                >
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </>
@@ -114,7 +183,7 @@ function Shell() {
         </div>
 
         {/* ── 导航菜单 ── */}
-        <nav className="flex-1 space-y-1 px-2 py-3">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
           {nav.map((item) => (
             <NavLink
               key={item.to}
@@ -122,7 +191,7 @@ function Shell() {
               title={item.label}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 rounded-md py-2 text-sm transition-colors ${
-                  collapsed ? "justify-center px-0" : "px-3"
+                  iconOnly ? "justify-center px-0" : "px-3"
                 } ${
                   isActive
                     ? "bg-amber-500/15 text-amber-300"
@@ -131,14 +200,14 @@ function Shell() {
               }
             >
               <item.icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {!iconOnly && <span className="truncate">{item.label}</span>}
             </NavLink>
           ))}
         </nav>
 
         {/* ── 底部：角色 + 退出 ── */}
         <div className="space-y-2 border-t border-zinc-800 px-3 py-3">
-          {!collapsed && (
+          {!iconOnly && (
             <div className="px-1 text-[11px] leading-relaxed text-zinc-500">
               角色：{roleLabel}
               {user.role !== "super_admin" && user.tenant_id != null && <div>租户 #{user.tenant_id}</div>}
@@ -151,16 +220,16 @@ function Shell() {
             }}
             title="退出登录"
             className={`flex w-full items-center gap-2 rounded-md py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-red-300 ${
-              collapsed ? "justify-center px-0" : "px-3"
+              iconOnly ? "justify-center px-0" : "px-3"
             }`}
           >
             <LogOut className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>退出登录</span>}
+            {!iconOnly && <span>退出登录</span>}
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pt-12 md:pt-0">
         <Routes>
           <Route path="/instances" element={<InstancesPage />} />
           <Route path="/instances/:id" element={<InstanceDetailPage />} />

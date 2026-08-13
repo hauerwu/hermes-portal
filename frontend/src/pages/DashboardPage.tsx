@@ -48,11 +48,11 @@ export default function DashboardPage() {
           className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white"
           title="退出 Dashboard，返回 Portal 实例列表"
         >
-          <ArrowLeft className="h-4 w-4" /> 返回
+          <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">返回</span>
         </Link>
         <div className="mx-1 h-5 w-px bg-zinc-800" />
         <LayoutDashboard className="h-4 w-4 shrink-0 text-amber-400" />
-        <span className="max-w-[30vw] truncate text-sm font-medium">{inst?.name ?? "加载中…"}</span>
+        <span className="min-w-0 max-w-[38vw] truncate text-sm font-medium sm:max-w-[30vw]">{inst?.name ?? "加载中…"}</span>
         {inst && (
           <span
             className={`rounded-full px-2 py-0.5 text-[11px] ${
@@ -74,7 +74,7 @@ export default function DashboardPage() {
           className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
           title="在新窗口打开 Dashboard"
         >
-          <ExternalLink className="h-3.5 w-3.5" /> 新窗口
+          <ExternalLink className="h-3.5 w-3.5" /> <span className="hidden sm:inline">新窗口</span>
         </a>
       </div>
 

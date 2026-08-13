@@ -88,8 +88,8 @@ export default function AuditLogsPage() {
   const page = Math.floor(offset / PAGE_SIZE) + 1;
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="mx-auto max-w-6xl p-4 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">审计日志</h1>
           <p className="text-sm text-zinc-500">
@@ -109,7 +109,7 @@ export default function AuditLogsPage() {
         <select
           value={action}
           onChange={(e) => { setAction(e.target.value); setOffset(0); }}
-          className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm outline-none focus:border-amber-500"
+          className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm outline-none focus:border-amber-500 sm:w-auto"
         >
           <option value="">全部动作</option>
           {actions.map((a) => (
@@ -123,7 +123,7 @@ export default function AuditLogsPage() {
             onChange={(e) => setTarget(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && flushFilters()}
             placeholder="目标（实例/用户 slug）"
-            className="w-56 rounded-md border border-zinc-700 bg-zinc-950 py-1.5 pl-8 pr-3 text-sm outline-none focus:border-amber-500"
+            className="w-full rounded-md border border-zinc-700 bg-zinc-950 py-1.5 pl-8 pr-3 text-sm outline-none focus:border-amber-500 sm:w-56"
           />
         </div>
         <input
@@ -131,7 +131,7 @@ export default function AuditLogsPage() {
           onChange={(e) => setActor(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && flushFilters()}
           placeholder="操作者用户名"
-          className="w-40 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm outline-none focus:border-amber-500"
+          className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm outline-none focus:border-amber-500 sm:w-40"
         />
         {(action || target || actor) && (
           <button
@@ -155,8 +155,8 @@ export default function AuditLogsPage() {
           <History className="mb-2 h-8 w-8" /> 暂无审计记录
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-800">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-xl border border-zinc-800">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-zinc-900 text-left text-xs text-zinc-500">
               <tr>
                 <th className="px-4 py-2.5">时间</th>

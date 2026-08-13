@@ -77,7 +77,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
+    <div className="mx-auto max-w-3xl p-4 sm:p-6">
       <div className="mb-5 flex items-center gap-2">
         <SettingsIcon className="h-5 w-5 text-amber-400" />
         <h1 className="text-xl font-semibold">设置</h1>

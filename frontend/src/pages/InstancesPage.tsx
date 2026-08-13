@@ -105,8 +105,8 @@ export default function InstancesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="mx-auto max-w-6xl p-4 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">实例管理</h1>
           <p className="text-sm text-zinc-500">本机 Docker 容器实例与远程 URL 纳管实例</p>
@@ -170,7 +170,7 @@ export default function InstancesPage() {
                   <ExternalLink className="h-3.5 w-3.5" /> 打开 Dashboard
                 </Link>
               </div>
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 {canManage ? (
                   <>
                     <button
@@ -336,7 +336,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
           </div>
           {mode === "docker" ? (
             <>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs text-zinc-400">镜像</label>
                   <input value={image} onChange={(e) => setImage(e.target.value)}

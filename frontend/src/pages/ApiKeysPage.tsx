@@ -51,8 +51,8 @@ export default function ApiKeysPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="mx-auto max-w-4xl p-4 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">API Keys</h1>
           <p className="text-sm text-zinc-500">用于统一网关 OpenAI API 的鉴权凭据（仅显示一次）</p>
@@ -80,8 +80,8 @@ export default function ApiKeysPage() {
           <KeyRound className="mb-2 h-8 w-8" /> 暂无 API Key
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-800">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-xl border border-zinc-800">
+          <table className="w-full min-w-[680px] text-sm">
             <thead className="bg-zinc-900 text-left text-xs text-zinc-500">
               <tr>
                 <th className="px-4 py-2.5">名称</th>

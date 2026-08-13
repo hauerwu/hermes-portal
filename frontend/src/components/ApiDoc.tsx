@@ -29,8 +29,8 @@ export default function ApiDoc() {
         {/* 端点表 */}
         <section>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">支持的接口</h3>
-          <div className="overflow-hidden rounded-lg border border-zinc-800">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto rounded-lg border border-zinc-800">
+            <table className="w-full min-w-[560px] text-xs">
               <thead className="bg-zinc-950/70 text-left text-zinc-500">
                 <tr>
                   <th className="px-3 py-2">方法</th>

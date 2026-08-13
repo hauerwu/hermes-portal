@@ -109,12 +109,12 @@ export default function InstanceDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <div className="mb-4 flex items-center gap-3">
-        <Link to="/instances" className="text-zinc-400 hover:text-zinc-200">
+    <div className="mx-auto max-w-7xl p-4 sm:p-6">
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Link to="/instances" className="shrink-0 text-zinc-400 hover:text-zinc-200">
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <h1 className="text-xl font-semibold">{inst.name}</h1>
+        <h1 className="min-w-0 truncate text-xl font-semibold">{inst.name}</h1>
         <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">{inst.status}</span>
         <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
           {inst.mode === "docker" ? "本机容器" : "远程纳管"}
@@ -314,7 +314,7 @@ function EditInstanceModal({
   return (
     <Modal open onClose={onClose} title="编辑实例" width="max-w-lg">
       <form onSubmit={submit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs text-zinc-400">名称</label>
               <input value={name} onChange={(e) => setName(e.target.value)} required
@@ -328,7 +328,7 @@ function EditInstanceModal({
           </div>
 
           {instance.mode === "docker" ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs text-zinc-400">镜像</label>
                 <input value={image} onChange={(e) => setImage(e.target.value)}
@@ -420,7 +420,7 @@ function EditInstanceModal({
               {envPairs.map(([k, v]) => (
                 <div key={k} className="flex gap-2">
                   <input value={k} readOnly
-                    className="w-2/5 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-xs outline-none" />
+                    className="w-1/3 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-xs outline-none sm:w-2/5" />
                   <input value={v}
                     onChange={(e) => setExtraEnv((prev) => ({ ...prev, [k]: e.target.value }))}
                     className="flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 font-mono text-xs outline-none focus:border-amber-500" />

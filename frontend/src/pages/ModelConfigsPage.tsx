@@ -82,8 +82,8 @@ export default function ModelConfigsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="mx-auto max-w-5xl p-4 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">模型配置</h1>
           <p className="text-sm text-zinc-500">模型库：维护多个推理端点，创建实例时选择使用</p>
@@ -255,7 +255,7 @@ function ModelModal({ model, onClose, onSaved }: { model: ModelConfig | null; on
               </select>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs text-zinc-400">显示名称</label>
               <input value={name} onChange={(e) => setName(e.target.value)} required
